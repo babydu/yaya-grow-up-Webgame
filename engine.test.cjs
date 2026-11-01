@@ -1,0 +1,493 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const G = require('./engine.js');
+const DAY = 86400000;
+const HOUR = 3600000;
+const NOW = new Date(2026, 0, 31, 12).getTime();
+function pet(type = 'cat', now = NOW) {
+  return G.adopt(G.create(now), type, now);
+}
+function complete(s, action = 'mood', product = null, now = s.updated) {
+  assert.equal(G.begin(s, action, product, now), null);
+  return G.advance(s, s.task.seconds, now);
+}
+function legacy() {
+  return { selected: 'dog', pets: { dog: { born: NOW - DAY, updated: NOW,
+    needs: [20, 30, 40, 50], xp: 120, count: 12, seconds: 600,
+    progress: [100, 10, 20, 30], leaves: 27, items: [0, 2],
+    logs: [{ at: NOW - DAY, text: '旧日记' }],
+    daily: { date: new Date(NOW).toLocaleDateString(), seconds: 50, count: 1 } } } };
+}
+
+test('CommonJS and native window exports, immutable definitions, isolated states', () => {
+  const context = { window: {} };
+  vm.runInNewContext(fs.readFileSync(require.resolve('./engine.js'), 'utf8'), context);
+  assert.equal(typeof context.window.GameEngine.create, 'function');
+  const a = G.create(NOW);
+  const b = G.create(NOW);
+  a.needs[0] = 0;
+  assert.equal(b.needs[0], 40);
+  assert.equal(b.selected, null);
+  assert.equal(b.adopted, false);
+  assert.equal(b.points, 60);
+  assert.equal(G.stage(b).index, 0);
+  assert.equal(Object.keys(G.profiles).length, 3);
+  assert.ok(Object.isFrozen(G.catalog[0].gain));
+  for (const p of G.catalog) {
+    for (const k of ['id', 'name', 'icon', 'category', 'types', 'minStage', 'price', 'pack', 'description', 'gain']) {
+      assert.ok(Object.hasOwn(p, k));
+    }
+    assert.ok(['food', 'clean', 'comfort', 'nutrition'].includes(p.category));
+  }
+});
+
+test('adoption initializes supplies, rejects switching and invalid types', () => {
+  for (const type of Object.keys(G.profiles)) {
+    const s = pet(type);
+    assert.equal(s.inventory[type + '-milk'], 5);
+    assert.equal(s.inventory[type + '-clean'], 5);
+    assert.throws(() => G.adopt(s, type, NOW));
+    assert.throws(() => G.adopt(s, 'dog', NOW));
+  }
+  for (const type of ['fox', '__proto__', 'constructor', null]) {
+    assert.throws(() => G.adopt(G.create(NOW), type, NOW));
+  }
+  const s = G.create(NOW);
+  assert.equal(typeof G.begin(s, 'mood', null, NOW), 'string');
+  assert.equal(typeof G.buy(s, 'cat-milk', NOW), 'string');
+});
+
+test('growth requires time AND care experience, all four stages and one-time rewards', () => {
+  const s = pet();
+  s.xp = 600;
+  assert.equal(G.stage(s).index, 0);
+  G.refresh(s, NOW + DAY);
+  assert.equal(G.stage(s).index, 1);
+  assert.equal(s.points, 80);
+  G.refresh(s, NOW + 6 * DAY);
+  assert.equal(G.stage(s).index, 2);
+  G.refresh(s, NOW + 12 * DAY);
+  assert.equal(G.stage(s).index, 3);
+  assert.equal(G.stage(s).age, 360);
+  assert.equal(G.stage(s).progress, 100);
+  assert.equal(G.stage(s).next, null);
+  assert.equal(s.points, 120);
+  G.refresh(s, s.updated);
+  assert.equal(G.load(JSON.stringify(s), null, s.updated).points, 120);
+  assert.ok(G.milestones(s).every(m => m.unlocked));
+  const young = pet();
+  G.refresh(young, NOW + 20 * DAY);
+  assert.equal(G.stage(young).index, 0);
+  assert.equal(G.stage(young).progress, 0);
+});
+
+test('completion can unlock growth and reports care reward', () => {
+  const s = pet();
+  G.refresh(s, NOW + DAY);
+  s.xp = 90;
+  const result = complete(s);
+  assert.equal(s.xp, 100);
+  assert.equal(s.stageIndex, 1);
+  assert.equal(result.points, 5);
+  assert.equal(s.points, 85);
+});
+
+test('begin deducts exactly once; pause, refresh, reload and resume preserve locked task', () => {
+  const s = pet();
+  assert.equal(G.begin(s, 'food', 'cat-milk', NOW), null);
+  assert.equal(s.inventory['cat-milk'], 4);
+  assert.equal(G.advance(s, 25, NOW), null);
+  const locked = structuredClone(s.task);
+  G.refresh(s, NOW + DAY);
+  assert.deepEqual(s.task, locked);
+  assert.equal(s.seconds, 25);
+  const restored = G.load(JSON.stringify(s), null, s.updated);
+  assert.equal(G.begin(restored, 'food', 'cat-milk', restored.updated), null);
+  assert.equal(restored.inventory['cat-milk'], 4);
+  assert.equal(typeof G.begin(restored, 'clean', 'cat-clean', restored.updated), 'string');
+  assert.deepEqual(restored.task, locked);
+  const result = G.advance(restored, 9999, restored.updated);
+  assert.equal(result.points, 5);
+  assert.equal(restored.seconds, 300);
+  assert.equal(restored.count, 1);
+  assert.equal(restored.daily.seconds, 275);
+  const done = structuredClone(restored);
+  assert.equal(G.advance(restored, 9999, restored.updated), null);
+  assert.deepEqual(restored, done);
+});
+
+test('cooldowns, early need override and overfeeding prevention', () => {
+  const s = pet();
+  complete(s, 'food', 'cat-milk');
+  assert.equal(s.needs[0], 85);
+  assert.equal(typeof G.begin(s, 'food', 'cat-milk', NOW + HOUR), 'string');
+  s.needs[0] = 34;
+  assert.equal(G.begin(s, 'food', 'cat-milk', s.updated), null);
+  completeTask(s);
+  s.needs[0] = 0;
+  assert.equal(typeof G.begin(s, 'food', 'cat-milk', s.updated), 'string');
+  assert.equal(G.begin(s, 'food', 'cat-milk', s.updated + 60000), null);
+  function completeTask(state) { G.advance(state, state.task.seconds, state.updated); }
+});
+
+test('active feeding survives stage change, serialization and resume with original duration', () => {
+  const s = pet();
+  s.xp = 100;
+  G.begin(s, 'food', 'cat-milk', NOW);
+  G.advance(s, 15, NOW);
+  G.refresh(s, NOW + DAY);
+  assert.equal(G.stage(s).index, 1);
+  assert.equal(G.careOptions(s)[0].seconds, 240);
+  assert.equal(s.task.seconds, 300);
+  assert.equal(G.products(s, 'food').some(p => p.id === 'cat-milk'), false);
+  const loaded = G.load(s, null, s.updated);
+  assert.equal(G.begin(loaded, 'food', 'cat-milk', loaded.updated), null);
+  assert.equal(loaded.inventory['cat-milk'], 4);
+  assert.equal(G.advance(loaded, 285, loaded.updated).points, 5);
+  assert.equal(loaded.seconds, 300);
+  assert.equal(loaded.task, null);
+});
+
+test('daily care rewards cap at 40; reset and effective experience only', () => {
+  const s = pet();
+  for (let i = 0; i < 12; i++) {
+    s.needs[2] = 0;
+    const result = complete(s, 'mood', null, NOW + i * 60000);
+    assert.equal(result.points, i < 8 ? 5 : 0);
+  }
+  assert.equal(s.daily.earned, 40);
+  assert.equal(s.points, 100);
+  assert.equal(s.xp, 120);
+  G.refresh(s, NOW + DAY);
+  assert.equal(s.daily.earned, 0);
+  assert.equal(s.daily.count, 0);
+  s.needs[2] = 50;
+  assert.equal(G.begin(s, 'mood', null, s.updated), null);
+  s.needs[2] = 100;
+  const xp = s.xp;
+  assert.equal(G.advance(s, 60, s.updated).points, 0);
+  assert.equal(s.xp, xp);
+});
+
+test('checkin uses local calendar across months, leap days, year and gaps; same day idempotent', () => {
+  for (const [y, m, d] of [[2026, 0, 31], [2024, 1, 28], [2026, 11, 31]]) {
+    const now = new Date(y, m, d, 23, 55).getTime();
+    const s = pet('baby', now);
+    assert.equal(G.checkin(s, now), null);
+    const saved = structuredClone(s);
+    assert.equal(G.checkin(s, now), null);
+    assert.deepEqual(s, saved);
+    const tomorrow = new Date(y, m, d + 1, 0, 5).getTime();
+    G.checkin(s, tomorrow);
+    assert.equal(s.checkin.streak, 2);
+    assert.equal(s.points, 83);
+    G.checkin(s, new Date(y, m, d + 3, 12).getTime());
+    assert.equal(s.checkin.streak, 1);
+  }
+});
+
+test('purchase validates points, species, stage, id and quantity; catalog covers stages', () => {
+  const s = pet();
+  assert.equal(G.buy(s, 'cat-milk', NOW), null);
+  assert.equal(s.points, 50);
+  assert.equal(s.inventory['cat-milk'], 10);
+  for (const id of ['dog-milk', 'cat-food-2', 'bad', '__proto__']) {
+    assert.equal(typeof G.buy(s, id, NOW), 'string');
+  }
+  s.points = 0;
+  assert.equal(typeof G.buy(s, 'cat-milk', NOW), 'string');
+  assert.equal(s.inventory['cat-milk'], 10);
+  for (const type of Object.keys(G.profiles)) {
+    const a = pet(type);
+    for (let index = 0; index < 4; index++) {
+      a.xp = [0, 100, 300, 600][index];
+      G.refresh(a, NOW + [0, 1, 6, 12][index] * DAY);
+      assert.ok(G.products(a, 'food').some(p => p.category === 'food'));
+      assert.ok(G.products(a, 'clean').length);
+      assert.equal(G.careOptions(a).length, 4);
+    }
+  }
+});
+
+test('invalid product/action/stock and optional toy; free rest and play', () => {
+  const s = pet();
+  for (const [action, product] of [['bad', null], ['food', null], ['food', 'cat-toy'],
+    ['food', 'dog-milk'], ['clean', 'cat-milk'], ['energy', 'cat-toy'], ['mood', 'cat-toy']]) {
+    assert.equal(typeof G.begin(s, action, product, NOW), 'string');
+    assert.equal(s.task, null);
+  }
+  assert.equal(G.buy(s, 'cat-toy', NOW), null);
+  complete(s, 'mood', 'cat-toy');
+  assert.equal(s.inventory['cat-toy'], 2);
+  complete(s, 'energy');
+  const a = pet();
+  complete(a);
+  assert.equal(a.needs[2], 100);
+});
+
+test('offline decay is elapsed-based, bounded, idempotent and never advances tasks', () => {
+  const s = pet();
+  G.begin(s, 'clean', 'cat-clean', NOW);
+  G.refresh(s, NOW + 2 * HOUR);
+  assert.deepEqual(s.needs, [10, 60, 0, 50]);
+  assert.equal(s.task.elapsed, 0);
+  const saved = structuredClone(s);
+  G.refresh(s, s.updated);
+  assert.deepEqual(s, saved);
+  G.refresh(s, NOW + 100 * DAY);
+  assert.deepEqual(s.needs, [0, 0, 0, 0]);
+  assert.equal(s.xp, 0);
+  assert.equal(s.count, 0);
+});
+
+test('relief handles both or either missing class, daily limit and stage transition soft locks', () => {
+  for (const missing of [['food'], ['clean'], ['food', 'clean']]) {
+    const s = pet();
+    if (missing.includes('food')) s.inventory['cat-milk'] = 0;
+    if (missing.includes('clean')) s.inventory['cat-clean'] = 0;
+    assert.equal(G.relief(s, NOW), null);
+    assert.equal(s.inventory['cat-milk'], missing.includes('food') ? 2 : 5);
+    assert.equal(s.inventory['cat-clean'], missing.includes('clean') ? 2 : 5);
+    assert.equal(typeof G.relief(s, NOW), 'string');
+    s.inventory['cat-milk'] = 0;
+    assert.equal(G.relief(s, NOW + DAY), null);
+  }
+  const s = pet();
+  assert.equal(typeof G.relief(s, NOW), 'string');
+  assert.equal(s.reliefDate, '');
+  s.xp = 100;
+  G.refresh(s, NOW + DAY);
+  s.points = 0;
+  assert.equal(G.relief(s, s.updated), null);
+  assert.equal(s.inventory['cat-food-1'], 2);
+  assert.equal(s.inventory['cat-clean'], 5);
+});
+
+test('touch cooldown, species responses, bond cap and epoch-zero first touch', () => {
+  const messages = [];
+  for (const type of Object.keys(G.profiles)) {
+    const s = pet(type, 0);
+    const first = G.touch(s, 0);
+    assert.equal(first.rewarded, true);
+    messages.push(first.message);
+    assert.equal(G.touch(s, 59999).rewarded, false);
+    assert.equal(G.touch(s, 60000).rewarded, true);
+    s.bond = 100;
+    assert.notEqual(G.touch(s, 120000).message, first.message);
+    assert.equal(s.bond, 100);
+  }
+  assert.equal(new Set(messages).size, 3);
+});
+
+test('legacy migration preserves selected values, progress, diary and confirmation', () => {
+  const raw = legacy();
+  const copy = structuredClone(raw);
+  const s = G.load(null, JSON.stringify(raw), NOW);
+  assert.equal(s.selected, 'dog');
+  assert.equal(s.adopted, false);
+  for (const key of ['born', 'needs', 'xp', 'count', 'seconds', 'logs', 'progress', 'items']) {
+    assert.deepEqual(s[key], raw.pets.dog[key]);
+  }
+  assert.equal(s.points, 27);
+  assert.equal(s.daily.seconds, 50);
+  const restored = G.load(JSON.stringify(s), null, NOW);
+  G.adopt(restored, 'dog', NOW);
+  assert.equal(restored.xp, 120);
+  assert.equal(restored.born, raw.pets.dog.born);
+  assert.deepEqual(restored.progress, [100, 10, 20, 30]);
+  assert.equal(G.begin(restored, 'clean', 'dog-clean', NOW), null);
+  assert.equal(restored.task.elapsed, 10);
+  assert.equal(restored.inventory['dog-clean'], 4);
+  assert.equal(G.begin(restored, 'clean', 'dog-clean', NOW), null);
+  assert.equal(restored.inventory['dog-clean'], 4);
+  assert.equal(G.advance(restored, 20, NOW).points, 5);
+  assert.deepEqual(raw, copy);
+  G.adopt(s, 'cat', NOW);
+  assert.equal(s.xp, 0);
+  assert.equal(s.points, 60);
+  assert.deepEqual(s.progress, [0, 0, 0, 0]);
+});
+
+test('load clones input, prioritizes v2, rejects corrupt v2 without silent fallback', () => {
+  const s = pet();
+  const copy = structuredClone(s);
+  const result = G.load(s, legacy(), NOW + HOUR);
+  assert.equal(result.selected, 'cat');
+  assert.deepEqual(s, copy);
+  assert.throws(() => G.load('{', legacy(), NOW));
+  assert.throws(() => G.load('', null, NOW));
+  assert.deepEqual(G.load(null, null, NOW), G.create(NOW));
+});
+
+test('strict corrupt-save and numeric boundary rejection', () => {
+  const changes = [s => { s.version = 1; }, s => { s.selected = '__proto__'; },
+    s => { s.needs = [1, 2, 3]; }, s => { s.needs[0] = NaN; },
+    s => { s.needs[0] = 101; }, s => { s.xp = -1; }, s => { s.count = 0.5; },
+    s => { s.points = Infinity; }, s => { s.inventory['bad'] = 1; },
+    s => { s.inventory['cat-milk'] = -1; }, s => { s.inventory['cat-milk'] = 1.5; },
+    s => { s.daily.date = '2026-02-30'; }, s => { s.daily.earned = 41; },
+    s => { s.checkin.date = '2099-01-01'; s.checkin.streak = 1; },
+    s => { s.lastCare.bad = NOW; }, s => { s.lastTouch = NOW + 1; },
+    s => { s.logs = [{ at: NOW, text: 1 }]; }, s => { s.born = NOW + 1; },
+    s => { s.stageIndex = 3; }, s => { s.progress = [301, 0, 0, 0]; },
+    s => { s.items = [9]; }, s => { s.task = {}; },
+    s => { s.task = { actionId: 'food', productId: null, name: 'bad', seconds: 30, elapsed: 0 }; }];
+  for (const change of changes) {
+    const s = pet();
+    change(s);
+    assert.throws(() => G.load(s, null, NOW));
+  }
+  for (const now of [-1, NaN, Infinity, '123', 0.5, 8640000000000001]) assert.throws(() => G.create(now));
+  const s = pet();
+  const before = structuredClone(s);
+  for (const delta of [-1, Infinity, NaN, '1']) assert.throws(() => G.advance(s, delta, NOW));
+  assert.throws(() => G.refresh(s, NOW - 1));
+  assert.deepEqual(s, before);
+  const old = legacy();
+  old.pets.dog.progress[0] = 301;
+  assert.throws(() => G.load(null, old, NOW));
+});
+
+test('baby complementary feeding retains formula through stage 2 only', () => {
+  const s = pet('baby');
+  s.xp = 300;
+  G.refresh(s, NOW + 6 * DAY);
+  const foods = G.products(s, 'food').map(p => p.id);
+  assert.ok(foods.includes('baby-milk'));
+  assert.ok(foods.includes('baby-food-2'));
+  assert.equal(G.buy(s, 'baby-milk', s.updated), null);
+  complete(s, 'food', 'baby-milk');
+  s.xp = 600;
+  G.refresh(s, NOW + 12 * DAY);
+  assert.equal(G.products(s, 'food').some(p => p.id === 'baby-milk'), false);
+});
+
+test('nutrition is a complete meal: one stock deduction, capped gains and relief recognition', () => {
+  for (const type of Object.keys(G.profiles)) {
+    const s = pet(type);
+    s.xp = 300;
+    G.refresh(s, NOW + 6 * DAY);
+    s.inventory = { [type + '-clean']: 1 };
+    const id = type + '-nutrition';
+    const meal = G.products(s, 'food').find(p => p.id === id);
+    assert.match(meal.description, /完整主食/);
+    assert.equal(G.buy(s, id, s.updated), null);
+    assert.equal(typeof G.relief(s, s.updated), 'string');
+    assert.equal(s.reliefDate, '');
+    s.needs = [70, 50, 50, 95];
+    assert.equal(G.begin(s, 'food', id, s.updated), null);
+    assert.equal(G.begin(s, 'food', id, s.updated), null);
+    assert.equal(s.inventory[id], meal.pack - 1);
+    assert.equal(Object.hasOwn(s.task, 'stapleId'), false);
+    const restored = G.load(s, null, s.updated);
+    G.advance(restored, restored.task.seconds, restored.updated);
+    assert.deepEqual(restored.needs, [100, 50, 50, 100]);
+  }
+});
+
+test('decay derives from care intervals and uses destination stage for elapsed time', () => {
+  for (const type of ['cat', 'baby']) {
+    for (let index = 0; index < 4; index++) {
+      const s = pet(type);
+      s.xp = [0, 100, 300, 600][index];
+      G.refresh(s, NOW + [0, 1, 6, 12][index] * DAY);
+      s.needs = [100, 100, 100, 100];
+      const options = G.careOptions(s);
+      G.refresh(s, s.updated + HOUR);
+      assert.deepEqual(s.needs, options.map(o => 100 - o.gain / o.intervalHours));
+    }
+  }
+  const s = pet();
+  s.xp = 100;
+  G.refresh(s, NOW + DAY - HOUR);
+  s.needs = [100, 100, 100, 100];
+  G.refresh(s, NOW + DAY);
+  assert.equal(G.stage(s).index, 1);
+  assert.equal(s.needs[0], 100 - 45 / 4);
+});
+
+test('species-specific final stage names propagate to next, diary, products and milestones', () => {
+  for (const type of Object.keys(G.profiles)) {
+    const s = pet(type);
+    s.xp = 300;
+    G.refresh(s, NOW + 6 * DAY);
+    const name = type === 'baby' ? '幼儿期' : '成年期';
+    assert.equal(G.stage(s).next.name, name);
+    s.xp = 600;
+    G.refresh(s, NOW + 12 * DAY);
+    assert.equal(G.stage(s).name, name);
+    assert.equal(G.milestones(s)[3].title, name);
+    assert.ok(s.logs.some(l => l.text.includes(`进入${name}`)));
+    const staple = G.products(s, 'food').find(p => p.category === 'food');
+    assert.ok((staple.name + staple.description).includes(name));
+  }
+});
+
+test('three emotional tiers and mature baby hugs', () => {
+  for (const type of Object.keys(G.profiles)) {
+    const messages = [0, 30, 65].map(bond => {
+      const s = pet(type);
+      s.bond = bond;
+      return G.touch(s, NOW).message;
+    });
+    assert.equal(new Set(messages).size, 3);
+    if (type === 'cat') assert.match(messages[2], /蹭蹭.*踩奶/);
+    if (type === 'dog') assert.match(messages[2], /迎接.*腿边/);
+  }
+  for (const bond of [0, 30, 65]) {
+    const s = pet('baby');
+    s.bond = bond;
+    s.xp = 600;
+    G.refresh(s, NOW + 12 * DAY);
+    assert.match(G.touch(s, s.updated).message, /拥抱/);
+  }
+});
+
+test('emotional milestones award exactly once at 30 and 65, including care crossings', () => {
+  const s = pet();
+  s.bond = 29;
+  G.touch(s, NOW);
+  assert.equal(s.bond, 30);
+  assert.equal(s.points, 70);
+  assert.deepEqual(s.emotionalMilestones, [30]);
+  const saved = structuredClone(s);
+  G.touch(s, NOW);
+  assert.deepEqual(s, saved);
+  s.bond = 63;
+  complete(s);
+  assert.equal(s.bond, 65);
+  assert.equal(s.points, 85);
+  assert.equal(s.daily.earned, 5);
+  assert.deepEqual(s.emotionalMilestones, [30, 65]);
+  assert.equal(s.logs.filter(l => l.text.includes('亲密度首次')).length, 2);
+  const restored = G.load(JSON.stringify(s), null, NOW);
+  G.refresh(restored, NOW);
+  G.touch(restored, NOW + 60000);
+  assert.equal(restored.points, 85);
+  assert.equal(restored.logs.filter(l => l.text.includes('亲密度首次')).length, 2);
+});
+
+test('emotional field compatibility, catch-up rewards and corruption validation', () => {
+  const old = pet();
+  delete old.emotionalMilestones;
+  assert.deepEqual(G.load(old, null, NOW).emotionalMilestones, []);
+  assert.equal(Object.hasOwn(old, 'emotionalMilestones'), false);
+  old.bond = 70;
+  const loaded = G.load(old, null, NOW);
+  assert.deepEqual(loaded.emotionalMilestones, [30, 65]);
+  assert.equal(loaded.points, 80);
+  assert.equal(G.load(loaded, null, NOW).points, 80);
+  for (const value of [null, {}, [30, 30], [65, 65], [0], ['30'], [30, 65, 65], [Infinity]]) {
+    const s = pet();
+    s.bond = 100;
+    s.emotionalMilestones = value;
+    assert.throws(() => G.load(s, null, NOW));
+  }
+  const invalid = pet();
+  invalid.emotionalMilestones = [30];
+  assert.throws(() => G.load(invalid, null, NOW));
+});
