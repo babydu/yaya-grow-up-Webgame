@@ -82,6 +82,36 @@ const assert = require('node:assert/strict');
     assert.equal(await page.locator('#bgm-enabled').isChecked(), true);
     assert.equal(await page.locator('#bgm-style').inputValue(), 'wave');
     assert.equal(await page.locator('#bgm-volume').inputValue(), '45');
+    await page.locator('input[data-bg="energy"]').check();
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('slow-growing-background'))),
+      { food: false, clean: false, mood: false, energy: true });
+    assert.match(await page.locator('#secondary-page').innerText(), /后台 1 项/);
+    await page.locator('nav [data-page="home"]').click();
+    await page.locator('#care-cards [data-care="energy"]').click();
+    await page.locator('#care-toggle').click();
+    assert.equal(await page.locator('#bgm-now').isVisible(), true);
+    assert.match(await page.locator('#bgm-now-name').innerText(), /海浪/);
+    await page.locator('#bgm-now-style').selectOption('forest');
+    assert.match(await page.locator('#bgm-now-name').innerText(), /森林晨间/);
+    assert.equal((await page.evaluate(() => JSON.parse(localStorage.getItem('slow-growing-bgm')))).style, 'forest');
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(2600);
+    assert.notEqual(await page.locator('#timer').innerText(), '02:00');
+    assert.equal(await page.evaluate(() => window.GameAudio.active), true);
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.evaluate(() => {
+      state.task.elapsed = state.task.seconds - 0.5;
+      localStorage.setItem('slow-growing-v2', JSON.stringify(state));
+    });
+    await page.locator('#info-dialog').waitFor({ state: 'visible' });
+    await page.locator('.close-button-inline').click();
+    assert.equal(await page.locator('#bgm-now').isVisible(), false);
     for (const width of [375, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
