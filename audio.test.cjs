@@ -68,6 +68,7 @@ test('Node 环境下读写与播放均安全降级', () => {
   A.setVolume(2);
   assert.equal(A.pref.volume, 1);
   assert.equal(A.active, false);
+  assert.equal(A.blocked, false);
 });
 
 test('stylesHtml 渲染下拉选项并标记选中项', () => {

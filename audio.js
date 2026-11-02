@@ -135,7 +135,7 @@
       lp.type = 'lowpass';
       lp.frequency.value = 5000;
       const gain = ctx.createGain();
-      gain.gain.value = 0.12;
+      gain.gain.value = 0.18;
       src.connect(lp); lp.connect(gain); gain.connect(bus);
       sources.push(src);
       src.start();
@@ -149,7 +149,7 @@
       lp.type = 'lowpass';
       lp.frequency.value = 1500;
       const gain = ctx.createGain();
-      gain.gain.value = 0.4;
+      gain.gain.value = 0.55;
       src.connect(hp); hp.connect(lp); lp.connect(gain); gain.connect(bus);
       sources.push(src, lfo(0.11, 0.1, gain.gain));
       src.start();
@@ -161,7 +161,7 @@
       lp.type = 'lowpass';
       lp.frequency.value = 500;
       const gain = ctx.createGain();
-      gain.gain.value = 0.5;
+      gain.gain.value = 0.65;
       src.connect(lp); lp.connect(gain); gain.connect(bus);
       sources.push(src, lfo(0.07, 0.42, gain.gain));
       src.start();
@@ -176,6 +176,7 @@
       const notes = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66];
       let step = 3;
       function pluck() {
+        if (ctx.state !== 'running') { timers.push(setTimeout(pluck, 400)); return; }
         const t = ctx.currentTime;
         step = Math.max(0, Math.min(notes.length - 1, step + Math.floor(Math.random() * 3) - 1));
         const osc = ctx.createOscillator();
@@ -183,7 +184,7 @@
         osc.frequency.value = notes[step];
         const g = ctx.createGain();
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.22, t + 0.02);
         g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8 + Math.random() * 0.7);
         osc.connect(g); g.connect(bus); g.connect(delay);
         osc.start(t);
@@ -198,12 +199,13 @@
       lp.type = 'lowpass';
       lp.frequency.value = 400;
       const gain = ctx.createGain();
-      gain.gain.value = 0.06;
+      gain.gain.value = 0.09;
       wind.connect(lp); lp.connect(gain); gain.connect(bus);
       sources.push(wind, lfo(0.05, 0.03, gain.gain));
       wind.start();
       sources[sources.length - 1].start();
       function chirp() {
+        if (ctx.state !== 'running') { timers.push(setTimeout(chirp, 400)); return; }
         const t = ctx.currentTime;
         const osc = ctx.createOscillator();
         osc.type = 'sine';
@@ -213,7 +215,7 @@
         osc.frequency.exponentialRampToValueAtTime(base * 0.9, t + 0.16);
         const g = ctx.createGain();
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.05, t + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.08, t + 0.03);
         g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
         let pan = null;
         osc.connect(g);
@@ -235,7 +237,7 @@
         if (!Ctor) { ok = false; return false; }
         ctx = new Ctor();
         master = ctx.createGain();
-        master.gain.value = pref.volume * 0.5;
+        master.gain.value = pref.volume * 0.85;
         master.connect(ctx.destination);
       }
       if (ctx.state === 'suspended') {
@@ -247,6 +249,33 @@
       ok = false;
       return false;
     }
+  }
+
+  // Mobile browsers (iOS Safari, WeChat/UC webviews) only release the audio
+  // subsystem after a user gesture, and several also require one silent
+  // buffer play. Run this on the earliest gestures so later care sessions
+  // can sound immediately.
+  function unlock() {
+    if (!ensureCtx()) return;
+    try {
+      if (ctx.state === 'suspended') {
+        const resume = ctx.resume();
+        if (resume && typeof resume.catch === 'function') resume.catch(() => {});
+      }
+      const silent = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = silent;
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch { /* unlock is best-effort */ }
+  }
+
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    const gesture = () => {
+      if (!ctx || ctx.state !== 'running') unlock();
+    };
+    document.addEventListener('pointerdown', gesture, { passive: true });
+    document.addEventListener('touchend', gesture, { passive: true });
   }
 
   function build(styleId) {
@@ -311,7 +340,7 @@
     const v = Number(value);
     pref.volume = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : DEFAULT.volume;
     if (ctx && master) {
-      try { fade(master, pref.volume * 0.5, 0.2); } catch { /* keep previous level */ }
+      try { fade(master, pref.volume * 0.85, 0.2); } catch { /* keep previous level */ }
     }
     return writeStore();
   }
@@ -325,6 +354,7 @@
     setEnabled, setStyle, setVolume, stylesHtml,
     get pref() { return validatePref(pref); },
     get active() { return !!current; },
-    get ok() { return ok; }
+    get ok() { return ok; },
+    get blocked() { return !!(ctx && ctx.state !== 'running'); }
   });
 });
