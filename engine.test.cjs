@@ -35,13 +35,13 @@ test('CommonJS and native window exports, immutable definitions, isolated states
   assert.equal(b.adopted, false);
   assert.equal(b.points, 60);
   assert.equal(G.stage(b).index, 0);
-  assert.equal(Object.keys(G.profiles).length, 3);
+  assert.equal(Object.keys(G.profiles).length, 4);
   assert.ok(Object.isFrozen(G.catalog[0].gain));
   for (const p of G.catalog) {
     for (const k of ['id', 'name', 'icon', 'category', 'types', 'minStage', 'price', 'pack', 'description', 'gain']) {
       assert.ok(Object.hasOwn(p, k));
     }
-    assert.ok(['food', 'clean', 'comfort', 'nutrition'].includes(p.category));
+    assert.ok(['food', 'clean', 'comfort', 'nutrition', 'accessory'].includes(p.category));
   }
 });
 
@@ -280,7 +280,7 @@ test('touch cooldown, species responses, bond cap and epoch-zero first touch', (
     assert.notEqual(G.touch(s, 120000).message, first.message);
     assert.equal(s.bond, 100);
   }
-  assert.equal(new Set(messages).size, 3);
+  assert.equal(new Set(messages).size, 4);
 });
 
 test('legacy migration preserves selected values, progress, diary and confirmation', () => {
@@ -374,7 +374,7 @@ test('nutrition is a complete meal: one stock deduction, capped gains and relief
     s.inventory = { [type + '-clean']: 1 };
     const id = type + '-nutrition';
     const meal = G.products(s, 'food').find(p => p.id === id);
-    assert.match(meal.description, /完整主食/);
+    assert.match(meal.description, /完整/);
     assert.equal(G.buy(s, id, s.updated), null);
     assert.equal(typeof G.relief(s, s.updated), 'string');
     assert.equal(s.reliefDate, '');
@@ -411,11 +411,12 @@ test('decay derives from care intervals and uses destination stage for elapsed t
 });
 
 test('species-specific final stage names propagate to next, diary, products and milestones', () => {
+  const finalNames = { baby: '小小侠客', cat: '成年猫', dog: '成年犬', plant: '盛放' };
   for (const type of Object.keys(G.profiles)) {
     const s = pet(type);
     s.xp = 300;
     G.refresh(s, NOW + 6 * DAY);
-    const name = type === 'baby' ? '幼儿期' : '成年期';
+    const name = finalNames[type];
     assert.equal(G.stage(s).next.name, name);
     s.xp = 600;
     G.refresh(s, NOW + 12 * DAY);
@@ -423,7 +424,8 @@ test('species-specific final stage names propagate to next, diary, products and 
     assert.equal(G.milestones(s)[3].title, name);
     assert.ok(s.logs.some(l => l.text.includes(`进入${name}`)));
     const staple = G.products(s, 'food').find(p => p.category === 'food');
-    assert.ok((staple.name + staple.description).includes(name));
+    const stapleWord = { baby: '幼儿期', cat: '成年期', dog: '成年期', plant: '盛放期' }[type];
+    assert.ok((staple.name + staple.description).includes(stapleWord));
   }
 });
 
@@ -490,4 +492,92 @@ test('emotional field compatibility, catch-up rewards and corruption validation'
   const invalid = pet();
   invalid.emotionalMilestones = [30];
   assert.throws(() => G.load(invalid, null, NOW));
+});
+
+test('design pack: four profiles with bible names, kinds and per-type stage labels', () => {
+  const expected = {
+    baby: { name: '阿团', kind: '宝宝', stages: ['襁褓', '坐立', '学步', '小小侠客'] },
+    cat: { name: '橘汐', kind: '小猫', stages: ['篮中小猫', '毛球', '铃铛少年', '成年猫'] },
+    dog: { name: '麦芽', kind: '小狗', stages: ['篮中幼犬', '毛球小狗', '少年期', '成年犬'] },
+    plant: { name: '团子', kind: '小植物', stages: ['破土', '幼苗', '含苞', '盛放'] }
+  };
+  for (const [type, e] of Object.entries(expected)) {
+    assert.equal(G.profiles[type].name, e.name);
+    assert.equal(G.profiles[type].kind, e.kind);
+    for (let i = 0; i < 4; i++) {
+      const s = pet(type);
+      s.xp = 600;
+      G.refresh(s, NOW + 12 * DAY);
+      assert.equal(G.stage(s).name, e.stages[3]);
+      assert.equal(G.milestones(s)[i].title, e.stages[i]);
+      assert.equal(G.careOptions(s).map(a => a.name)[0], { baby: '喂养', cat: '喂养', dog: '喂养', plant: '浇水' }[type]);
+    }
+  }
+});
+
+test('plant care semantics: water, leaf care, sunshine and growth labels', () => {
+  const s = pet('plant');
+  const options = G.careOptions(s);
+  assert.deepEqual(options.map(a => a.name), ['浇水', '擦叶除虫', '晒太阳', '安静生长']);
+  assert.deepEqual(options.map(a => a.need), ['水分', '洁净度', '阳光', '养分']);
+  assert.ok(G.products(s, 'food').some(p => p.id === 'plant-milk'));
+  assert.ok(G.products(s, 'clean').some(p => p.id === 'plant-clean'));
+  assert.equal(G.buy(s, 'plant-milk', s.updated), null);
+  const result = complete(s, 'food', 'plant-milk');
+  assert.equal(result.title, '照护完成');
+});
+
+test('accessory catalog: 16 items, per-type, prices and stage gating', () => {
+  const accessories = G.catalog.filter(p => p.category === 'accessory');
+  assert.equal(accessories.length, 16);
+  for (const type of ['baby', 'cat', 'dog', 'plant']) {
+    const own = accessories.filter(p => p.types.includes(type));
+    assert.equal(own.length, 4);
+    assert.deepEqual(own.map(p => p.minStage), [0, 1, 2, 3]);
+    assert.deepEqual(own.map(p => p.price), [30, 45, 60, 80]);
+    assert.equal(own.every(p => p.pack === 1), true);
+  }
+});
+
+test('accessory wear: purchase then wear, swap, take off and validation', () => {
+  const s = pet('cat');
+  s.xp = 600;
+  G.refresh(s, NOW + 12 * DAY);
+  s.points = 200;
+  assert.equal(G.buy(s, 'acc-cat-1', s.updated), null);
+  assert.equal(s.inventory['acc-cat-1'], 1);
+  assert.equal(G.wear(s, 'acc-cat-2', s.updated), '请先在生活小铺兑换这件饰物');
+  assert.equal(G.wear(s, 'acc-dog-1', s.updated), '饰物不适用于当前对象');
+  const young = pet('cat');
+  assert.equal(G.wear(young, 'acc-cat-2', young.updated), '成长后才能佩戴这件饰物');
+  assert.equal(G.wear(s, 'acc-cat-1', s.updated), null);
+  assert.equal(s.worn, 'acc-cat-1');
+  assert.ok(s.logs.some(l => l.text.includes('针织围巾')));
+  assert.equal(G.buy(s, 'acc-cat-2', s.updated), null);
+  assert.equal(G.wear(s, 'acc-cat-2', s.updated), null);
+  assert.equal(s.worn, 'acc-cat-2');
+  assert.equal(G.wear(s, 'acc-cat-2', s.updated), null);
+  assert.equal(s.worn, null);
+  const loaded = G.load(s, null, s.updated + HOUR);
+  assert.equal(loaded.worn, null);
+  s.worn = 'acc-cat-1';
+  const wornLoad = G.load(s, null, s.updated + HOUR);
+  assert.equal(wornLoad.worn, 'acc-cat-1');
+  s.worn = 'acc-cat-3';
+  assert.throws(() => G.load(s, null, s.updated + HOUR));
+  s.worn = 'plant-food-1';
+  assert.throws(() => G.load(s, null, s.updated + HOUR));
+});
+
+test('worn accessory defaults to null for legacy v2 saves and resets on adopt', () => {
+  const s = pet('dog');
+  const raw = JSON.parse(JSON.stringify(s));
+  delete raw.worn;
+  const loaded = G.load(raw, null, NOW + HOUR);
+  assert.equal(loaded.worn, null);
+  const fresh = G.create(NOW);
+  assert.equal(fresh.worn, null);
+  const adopted = G.adopt(G.create(NOW), 'plant', NOW);
+  assert.equal(adopted.worn, null);
+  assert.ok(adopted.inventory['plant-milk'] === 5 && adopted.inventory['plant-clean'] === 5);
 });

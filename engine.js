@@ -15,13 +15,26 @@
   const ages = [0, 30, 180, 360];
   const experience = [0, 100, 300, 600];
   const names = ['初生期', '探索期', '成长期', '成年期'];
+  const stageLabels = {
+    baby: ['襁褓', '坐立', '学步', '小小侠客'],
+    cat: ['篮中小猫', '毛球', '铃铛少年', '成年猫'],
+    dog: ['篮中幼犬', '毛球小狗', '少年期', '成年犬'],
+    plant: ['破土', '幼苗', '含苞', '盛放']
+  };
   function stageName(type, index) {
-    return type === 'baby' && index === 3 ? '幼儿期' : names[index];
+    return (stageLabels[type] || stageLabels.cat)[index];
   }
   const profiles = {
-    cat: { name: '奶油', kind: '小猫', description: '陪伴小猫慢慢长大。' },
-    dog: { name: '土豆', kind: '小狗', description: '陪伴小狗探索世界。' },
-    baby: { name: '小满', kind: '宝宝', description: '回应宝宝的每一次需要。' }
+    cat: { name: '橘汐', kind: '小猫', description: '陪伴小猫咪橘汐慢慢长大。' },
+    dog: { name: '麦芽', kind: '小狗', description: '陪伴小狗麦芽探索世界。' },
+    baby: { name: '阿团', kind: '宝宝', description: '回应宝宝阿团的每一次需要。' },
+    plant: { name: '团子', kind: '小植物', description: '陪小植物团子从破土走到盛放。' }
+  };
+  const careMeta = {
+    cat: { actions: ['喂养', '清洁小窝', '陪伴玩耍', '安抚休息'], needs: ['饱腹感', '洁净度', '好心情', '精力值'] },
+    dog: { actions: ['喂养', '清洁小窝', '陪伴玩耍', '安抚休息'], needs: ['饱腹感', '洁净度', '好心情', '精力值'] },
+    baby: { actions: ['喂养', '换尿裤', '陪伴玩耍', '安抚休息'], needs: ['饱腹感', '洁净度', '好心情', '精力值'] },
+    plant: { actions: ['浇水', '擦叶除虫', '晒太阳', '安静生长'], needs: ['水分', '洁净度', '阳光', '养分'] }
   };
   const catalog = [];
   function product(id, name, icon, category, types, minStage, price, pack, gain, description) {
@@ -50,6 +63,30 @@
       '每份含当前适龄完整主食与普通营养食品，可作为一餐；增加游戏饱腹与精力属性，无医疗用途。');
     product(type + '-toy', profiles[type].kind + '玩具', 'heart', 'comfort',
       [type], 0, 12, 3, [0, 0, 45, 0], '一次陪玩消耗一份玩具使用次数。');
+  }
+  product('plant-milk', '植物营养液', 'bottle', 'food', ['plant'], 0, 10, 5,
+    [45, 0, 0, 5], '萌芽期专用营养液，稀释后浇灌。');
+  for (let i = 1; i < 4; i++) {
+    product('plant-food-' + i, profiles.plant.kind + stageLabels.plant[i] + '期花肥', 'bag', 'food',
+      ['plant'], i, 12 + i * 2, 5, [45, 0, 0, 5], '与当前成长阶段匹配的日常花肥。');
+  }
+  product('plant-clean', '叶面清洁喷雾', 'clean', 'clean', ['plant'], 0, 10, 5,
+    [0, 45, 0, 0], '轻轻擦去叶面灰尘，保持洁净。');
+  product('plant-nutrition', '植物营养均衡组合', 'leaf', 'nutrition', ['plant'], 2, 16, 3,
+    [50, 0, 0, 15], '每份含适龄花肥与营养液，可作为一次完整养护。');
+  product('plant-toy', '植物陪伴小风铃', 'heart', 'comfort', ['plant'], 0, 12, 3,
+    [0, 0, 45, 0], '晒太阳时挂在盆边，叮咚作响陪它度过一段时光。');
+  const accessoryFlavor = {
+    baby: [['针织小帽', '薄荷绿 · 顶绒球'], ['刺绣围兜', '桃粉 · 叶形绣样'], ['软底学步鞋', '奶白 · 单颗纽扣'], ['木质牙胶环', '原木 · 彩虹串珠']],
+    cat: [['针织围巾', '鼠尾草绿 · 流苏'], ['铃铛项圈', '雾蓝 · 黄铜铃'], ['毛线球', '奶白 · 手缠绕线'], ['木质鱼吊坠', '原木 · 挂绳']],
+    dog: [['三角头巾', '陶土橙 · 骨形图案'], ['皮项圈', '棕皮 · 黄铜铭牌'], ['编织拉绳球', '奶白与鼠尾草绿'], ['木质球玩具', '原木 · 手作纹路']],
+    plant: [['叶纹陶盆', '赤陶 · 白叶纹'], ['黄铜洒水壶', '磨砂黄铜 · 莲蓬头'], ['手绘标签牌', '纸与木签 · 花样'], ['园艺小铲', '木柄 · 尖头铁铲']]
+  };
+  for (const type of ['baby', 'cat', 'dog', 'plant']) {
+    accessoryFlavor[type].forEach(([name, detail], i) => {
+      product('acc-' + type + '-' + (i + 1), profiles[type].kind + '·' + name, 'spark', 'accessory',
+        [type], [0, 1, 2, 3][i], [30, 45, 60, 80][i], 1, [0, 0, 0, 0], name + '：' + detail + '。可在房间为' + profiles[type].name + '穿上。');
+    });
   }
   function freeze(value) {
     Object.values(value).forEach(v => { if (v && typeof v === 'object') freeze(v); });
@@ -98,6 +135,12 @@
     for (const [id, quantity] of Object.entries(s.inventory)) {
       assert(catalog.some(p => p.id === id && p.types.includes(s.selected)) && integer(quantity));
     }
+    if (own(s, 'worn') && s.worn !== null) {
+      assert(typeof s.worn === 'string');
+      const acc = catalog.find(p => p.id === s.worn);
+      assert(acc && acc.category === 'accessory' && acc.types.includes(s.selected)
+        && (s.inventory[s.worn] || 0) > 0);
+    }
     assert(Array.isArray(s.logs) && s.logs.length <= 1000);
     for (const log of s.logs) assert(record(log) && timestamp(log.at) && log.at <= s.updated
       && typeof log.text === 'string' && log.text.length <= 4000);
@@ -140,7 +183,7 @@
     assert(timestamp(now), '时间无效');
     return { version: 2, selected: null, adopted: false, born: now, updated: now,
       needs: [40, 75, 65, 70], xp: 0, count: 0, seconds: 0, bond: 0, points: 60,
-      inventory: {}, logs: [], task: null, lastCare: {}, emotionalMilestones: [],
+      inventory: {}, logs: [], task: null, lastCare: {}, emotionalMilestones: [], worn: null,
       daily: { date: date(now), seconds: 0, count: 0, earned: 0 },
       checkin: { date: '', streak: 0 }, reliefDate: '', stageIndex: 0, lastTouch: null };
   }
@@ -232,7 +275,8 @@
       const last = s.lastCare[id];
       const dueAt = last === undefined ? s.updated : s.needs[i] < 35
         ? last + 60000 : last + intervalHours * HOUR;
-      return { id, name: ['喂养', s.selected === 'baby' ? '换尿裤' : '清洁小窝', '陪伴玩耍', '安抚休息'][i],
+      return { id, name: careMeta[s.selected].actions[i],
+        need: careMeta[s.selected].needs[i],
         icon: ['bottle', 'clean', 'heart', 'moon'][i], seconds: [st.feedSeconds, 30, 60, 120][i],
         intervalHours, gain: [45, 45, 35, 40][i], dueAt,
         description: ['适量喂养，饱腹达到 80 时暂停喂养。', '保持干净舒适。', '专注陪伴。', '安心休息。'][i] };
@@ -316,6 +360,30 @@
     log(s, now, `购买${p.name} ${p.pack} 份。`);
     return null;
   }
+  function wear(s, id, now) {
+    refresh(s, now);
+    if (!s.adopted) return '请先确认养育对象';
+    if (id === null) {
+      if (s.worn) {
+        const acc = catalog.find(p => p.id === s.worn);
+        log(s, now, `脱下了${acc ? acc.name : '饰物'}。`);
+      }
+      s.worn = null;
+      return null;
+    }
+    const acc = catalog.find(item => item.id === id);
+    if (!acc || acc.category !== 'accessory' || !acc.types.includes(s.selected)) return '饰物不适用于当前对象';
+    if (stage(s).index < acc.minStage) return '成长后才能佩戴这件饰物';
+    if (!(s.inventory[id] > 0)) return '请先在生活小铺兑换这件饰物';
+    if (s.worn === id) {
+      s.worn = null;
+      log(s, now, `脱下了${acc.name}。`);
+    } else {
+      s.worn = id;
+      log(s, now, `为${profiles[s.selected].name}穿上了${acc.name}。`);
+    }
+    return null;
+  }
   function relief(s, now) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
@@ -346,8 +414,9 @@
     const responses = {
       cat: ['小猫轻轻闻了闻你的手。', '小猫蹭蹭你的手，发出呼噜声。', '小猫贴着你蹭蹭，安心地踩奶。'],
       dog: ['小狗好奇地望着你。', '小狗摇着尾巴迎接你。', '小狗开心地迎接你，然后依偎着靠在你腿边。'],
+      plant: ['嫩芽朝你的方向轻轻晃了晃。', '叶片舒展开来，向你轻轻点头。', '花苞微微颤动，像在说欢迎回来。'],
       baby: stage(s).index === 3
-        ? ['小满伸出手，试着给你一个拥抱。', '小满认出了你，张开双臂要拥抱。', '小满主动拥抱你，紧紧依偎在你怀里。']
+        ? [`${profiles.baby.name}伸出手，试着给你一个拥抱。`, `${profiles.baby.name}认出了你，张开双臂要拥抱。`, `${profiles.baby.name}主动拥抱你，紧紧依偎在你怀里。`]
         : ['宝宝看着你，握住你的手指。', '宝宝认出了你，安心地笑了。', '宝宝紧握你的手，在你怀里安心依偎。']
     };
     return { message: responses[s.selected][s.bond >= 65 ? 2 : s.bond >= 30 ? 1 : 0], rewarded };
@@ -370,6 +439,7 @@
       const raw = parse(rawV2);
       validate(raw);
       const s = JSON.parse(JSON.stringify(raw));
+      if (s.worn === undefined) s.worn = null;
       return refresh(s, now);
     }
     if (rawV1 === null || rawV1 === undefined) return create(now);
@@ -397,5 +467,5 @@
     return refresh(JSON.parse(JSON.stringify(s)), now);
   }
   return Object.freeze({ profiles, catalog, create, adopt, load, stage, refresh, careOptions,
-    products, begin, advance, checkin, buy, relief, touch, milestones });
+    products, begin, advance, checkin, buy, wear, relief, touch, milestones });
 });

@@ -75,12 +75,13 @@ function emotion() {
   const text = {
     cat:['它轻轻闻着你的手，开始记住你的气味。','熟悉的呼噜声响起，它把小脑袋靠在你手心。','你一回来，它就蹭着你的腿，在你身边安心踩奶。'],
     dog:['它歪着头看你，尾巴试探着摇了摇。','它把下巴放在你膝盖上，想再陪你一会儿。','听见你的脚步声，它跑来迎接，把身体紧紧靠着你。'],
-    baby:['小小的手指握住了你，世界忽然安静下来。','认出你的声音，宝宝露出了一个安心的笑容。',G.stage(state).index >= 3 ? '小满张开双臂扑向你，给了你一个大大的拥抱。' : '宝宝望着你笑，把小脸贴在你的肩膀上。']
+    plant:['嫩芽朝着你的方向轻轻晃动。','叶片舒展开来，露珠在叶尖闪着光。','花苞轻轻点了点头，把今天的开心都记下来了。'],
+    baby:['小小的手指握住了你，世界忽然安静下来。','认出你的声音，宝宝露出了一个安心的笑容。',G.stage(state).index >= 3 ? `${profile().name}张开双臂扑向你，给了你一个大大的拥抱。` : '宝宝望着你笑，把小脸贴在你的肩膀上。']
   };
   return text[state.selected || 'cat'][level];
 }
 function renderAdoption() {
-  $('adopt-options').innerHTML = Object.entries(G.profiles).map(([type,p]) => `<button class="adopt-option ${selectedType === type ? 'selected' : ''}" data-adopt="${type}" aria-pressed="${selectedType === type}"><span class="adopt-portrait">${portrait(type)}</span><strong>${p.kind} · ${p.name}</strong><small>${{cat:'安静依偎，慢热又柔软',dog:'热情迎接，陪你探索',baby:'从握住手指到主动拥抱'}[type]}</small><span class="selection-mark">${icon(selectedType === type ? 'check' : 'heart')}</span></button>`).join('');
+  $('adopt-options').innerHTML = Object.entries(G.profiles).map(([type,p]) => `<button class="adopt-option ${selectedType === type ? 'selected' : ''}" data-adopt="${type}" aria-pressed="${selectedType === type}"><span class="adopt-portrait">${portrait(type)}</span><strong>${p.kind} · ${p.name}</strong><small>${{cat:'安静依偎，慢热又柔软',dog:'热情迎接，陪你探索',baby:'从握住手指到主动拥抱',plant:'安静的盆栽，从破土到盛放'}[type]}</small><span class="selection-mark">${icon(selectedType === type ? 'check' : 'heart')}</span></button>`).join('');
   $('adopt-summary').textContent = state.selected === selectedType ? `继续与${profile().name}的故事，保留已有成长与照护进度。` : `${G.profiles[selectedType].description} 每天回来，感受一点点变化。`;
 }
 function render() {
@@ -102,13 +103,17 @@ function render() {
   $('growth-percent').textContent = `${state.xp} 成长经验`;
   $('growth-bar').style.width = `${st.progress}%`;
   $('status-tip').textContent = `每 ${st.feedHours} 小时关注进食 · 每次 ${duration(st.feedSeconds)}`;
-  if (!$('room-art').innerHTML) $('room-art').innerHTML = scene(state.selected);
-  const labels = ['饱腹感','洁净度','好心情','精力值'];
+  const sceneKey = state.selected + ':' + st.index + ':' + (state.worn || '');
+  if ($('room-art').dataset.sceneKey !== sceneKey) {
+    $('room-art').dataset.sceneKey = sceneKey;
+    $('room-art').innerHTML = scene(state.selected, st.index, state.worn);
+  }
+  const labels = actions.map(a => a.need);
   $('needs').innerHTML = state.needs.map((value,i) => `<div class="need ${actions[i].id}"><div class="need-top">${icon(actions[i].icon)}<span>${labels[i]}</span><span class="need-value">${Math.round(value)} / 100</span></div><div class="progress" role="progressbar" aria-label="${labels[i]}" aria-valuenow="${Math.round(value)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${value}%"></span></div></div>`).join('');
   const low = state.needs.indexOf(Math.min(...state.needs));
   if (Date.now() > responseUntil) $('speech').textContent = state.needs[low] < 40 ? ['肚子有点饿，你来啦？','想要干干净净的……','今天可以多陪陪我吗？','困了，陪我休息一会儿吧。'][low] : '看见你，今天又变好了。';
   $('pet-mood').textContent = state.task ? `等你继续${state.task.name}` : state.needs[low] < 40 ? ['到了进食的时间','需要清洁一下','想要你的陪伴','需要安静休息'][low] : '安心地享受你的陪伴';
-  $('pet-touch').innerHTML = icon('hand') + (state.selected === 'baby' ? '抱抱宝宝' : '摸摸它');
+  $('pet-touch').innerHTML = icon('hand') + (state.selected === 'baby' ? '抱抱宝宝' : state.selected === 'plant' ? '碰碰叶子' : '摸摸它');
   $('bond-card').innerHTML = `<span class="bond-icon">${icon('heart')}</span><div><strong>${['开始熟悉你','已经很依赖你','你是最安心的存在'][state.bond>=65?2:state.bond>=30?1:0]}</strong><p>${emotion()}</p></div><div class="bond-score"><b>${Math.round(state.bond)}</b> / 100<small>亲密度</small></div>`;
   $('care-cards').innerHTML = actions.map((a,i) => {
     const task = state.task?.actionId === a.id;
@@ -127,13 +132,13 @@ function render() {
 function renderSecondary() {
   const p=profile(),st=G.stage(state),el=$('secondary-page');
   if(page==='growth') {
-    el.innerHTML=`<div class="page-panel"><div class="eyebrow">LITTLE STEPS, BIG LOVE</div><h2>${p.name}的成长手册</h2><p>${st.description}<br>目前 ${st.label}，${state.xp} 点成长经验。${st.next?`下一阶段需要游戏年龄 ${st.next.age} 天与 ${st.next.xp} 经验。`:'成长还在继续，爱会留在每一天。'}</p><div class="milestones">${G.milestones(state).map(m=>`<article class="milestone ${m.unlocked?'current':''}">${icon(m.unlocked?'sprout':'clock')}<h3>${m.title}</h3><p>${m.description}</p><small>${m.unlocked?'已留下足迹':'慢慢到达 · 晋级 +20 积分'}</small></article>`).join('')}</div><h3>这个阶段，怎样好好照顾？</h3><div class="stage-guide"><p><b>吃什么</b><br>${G.products(state,'food').map(p=>p.name).join('、')}</p><p><b>多久一次</b><br>进食每 ${st.feedHours} 小时关注一次；清洁每 ${st.cleanHours} 小时关注一次。</p><p><b>陪伴的时间</b><br>进食 ${duration(st.feedSeconds)}；玩耍 1 分钟；安抚休息 2 分钟。</p></div><h3>双向奔赴的小瞬间</h3><div class="memory-cards">${[30,65].map((n,i)=>`<article class="milestone ${state.bond>=n?'current':''}">${icon('heart')}<h3>${i?'你是它的全世界':'开始认出你'}</h3><p>亲密度 ${n} 解锁，首次获得 10 积分。</p><small>${state.bond>=n?'已珍藏在你们的故事里':'每一次照料，都会靠近一点'}</small></article>`).join('')}</div></div>`;
+    el.innerHTML=`<div class="page-panel"><div class="eyebrow">LITTLE STEPS, BIG LOVE</div><h2>${p.name}的成长手册</h2><p>${st.description}<br>目前 ${st.label}，${state.xp} 点成长经验。${st.next?`下一阶段需要游戏年龄 ${st.next.age} 天与 ${st.next.xp} 经验。`:'成长还在继续，爱会留在每一天。'}</p><div class="milestones">${G.milestones(state).map(m=>{const i=Number(m.id.slice(6));return `<article class="milestone ${m.unlocked?'current':''}"><img class="stage-thumb" src="assets/stages/${state.selected}-${i+1}.png" alt="${m.title}立绘">${icon(m.unlocked?'sprout':'clock')}<h3>${m.title}</h3><p>${m.description}</p><small>${m.unlocked?'已留下足迹':'慢慢到达 · 晋级 +20 积分'}</small></article>`;}).join('')}</div><h3>这个阶段，怎样好好照顾？</h3><div class="stage-guide"><p><b>吃什么</b><br>${G.products(state,'food').map(p=>p.name).join('、')}</p><p><b>多久一次</b><br>进食每 ${st.feedHours} 小时关注一次；清洁每 ${st.cleanHours} 小时关注一次。</p><p><b>陪伴的时间</b><br>进食 ${duration(st.feedSeconds)}；玩耍 1 分钟；安抚休息 2 分钟。</p></div><h3>双向奔赴的小瞬间</h3><div class="memory-cards">${[30,65].map((n,i)=>`<article class="milestone ${state.bond>=n?'current':''}">${icon('heart')}<h3>${i?'你是它的全世界':'开始认出你'}</h3><p>亲密度 ${n} 解锁，首次获得 10 积分。</p><small>${state.bond>=n?'已珍藏在你们的故事里':'每一次照料，都会靠近一点'}</small></article>`).join('')}</div></div>`;
   } else if(page==='diary') {
     el.innerHTML=`<div class="page-panel"><div class="eyebrow">OUR ORDINARY, PRECIOUS DAYS</div><h2>${p.name}的养育日记</h2><p>成长、拥抱和认真照料的时刻，都值得记住。</p>${[...state.logs].reverse().map(l=>`<article class="diary-entry"><time>${new Date(l.at).toLocaleString('zh-CN')}</time><p>${escapeHtml(l.text)}</p></article>`).join('')}</div>`;
   } else if(page==='supplies') {
     const available = new Set(['food','clean','mood'].flatMap(id=>G.products(state,id).map(p=>p.id)));
-    const categories={all:'全部物资',food:'日常饮食',clean:'清洁护理',nutrition:'营养搭配',comfort:'陪伴玩具'};
-    el.innerHTML=`<div class="page-panel shop-panel"><div class="eyebrow">A WELL-STOCKED LITTLE HOME</div><div class="section-heading"><h2>生活小铺</h2><span class="points-pill">${icon('leaf')} ${state.points} 积分</span></div><p>适合${p.name}的小小补给。签到得 11–17 积分，有效照护每次 +5（每日上限 40），成长还有额外奖励。</p><div class="shop-filters">${Object.entries(categories).map(([id,name])=>`<button data-filter="${id}" class="${shopFilter===id?'active':''}" aria-pressed="${shopFilter===id}">${name}</button>`).join('')}</div><div class="shop-grid">${G.catalog.filter(item=>item.types.includes(state.selected)&&(shopFilter==='all'||item.category===shopFilter)).map(item=>{const usable=available.has(item.id);return `<article class="shop-item"><span class="product-icon">${icon(item.icon)}</span><span class="stock-tag">库存 ${state.inventory[item.id]||0}</span><h3>${item.name}</h3><p>${item.description}</p><small>${item.pack} 份 / 组 · ${usable?'适合当前阶段':item.minStage>st.index?'成长后解锁':'已度过适用阶段'}</small><button data-buy="${item.id}" ${!usable||state.points<item.price?'disabled':''}>${!usable?'阶段限定':state.points<item.price?'积分不足':`${item.price} 积分 · 兑换`}</button></article>`;}).join('')}</div><div class="relief-box"><div><strong>总有一份温柔的支持</strong><p>适龄主食或清洁用品耗尽时，每日可领取一次基础补给，各补 2 份。</p></div><button class="secondary" id="relief-button">领取基础补给</button></div></div>`;
+    const categories={all:'全部物资',food:'日常饮食',clean:'清洁护理',nutrition:'营养搭配',comfort:'陪伴玩具',accessory:'随身饰物'};
+    el.innerHTML=`<div class="page-panel shop-panel"><div class="eyebrow">A WELL-STOCKED LITTLE HOME</div><div class="section-heading"><h2>生活小铺</h2><span class="points-pill">${icon('leaf')} ${state.points} 积分</span></div><p>适合${p.name}的小小补给。签到得 11–17 积分，有效照护每次 +5（每日上限 40），成长还有额外奖励。</p><div class="shop-filters">${Object.entries(categories).map(([id,name])=>`<button data-filter="${id}" class="${shopFilter===id?'active':''}" aria-pressed="${shopFilter===id}">${name}</button>`).join('')}</div><div class="shop-grid">${G.catalog.filter(item=>item.types.includes(state.selected)&&(shopFilter==='all'||item.category===shopFilter)).map(item=>{const isAcc=item.category==='accessory';const owned=(state.inventory[item.id]||0)>0;const stageOk=st.index>=item.minStage;const usable=available.has(item.id);const media=isAcc?`<img class="acc-thumb" src="assets/acc/${item.id.slice(4)}.png" alt="${item.name}">`:`<span class="product-icon">${icon(item.icon)}</span>`;const note=isAcc?`${stageOk?'适合当前阶段':'成长后解锁'}${state.worn===item.id?' · 穿戴中':''}`:`${item.pack} 份 / 组 · ${usable?'适合当前阶段':item.minStage>st.index?'成长后解锁':'已度过适用阶段'}`;const action=isAcc?(owned?`<button data-wear="${item.id}" class="${state.worn===item.id?'secondary':''}">${state.worn===item.id?'脱下':'穿上'}</button>`:`<button data-buy="${item.id}" ${!stageOk||state.points<item.price?'disabled':''}>${!stageOk?'阶段限定':state.points<item.price?'积分不足':`${item.price} 积分 · 兑换`}</button>`):`<button data-buy="${item.id}" ${!usable||state.points<item.price?'disabled':''}>${!usable?'阶段限定':state.points<item.price?'积分不足':`${item.price} 积分 · 兑换`}</button>`;return `<article class="shop-item ${isAcc?'acc-item':''}">${media}<span class="stock-tag">库存 ${state.inventory[item.id]||0}</span><h3>${item.name}</h3><p>${item.description}</p><small>${note}</small>${action}</article>`;}).join('')}</div><div class="relief-box"><div><strong>总有一份温柔的支持</strong><p>适龄主食或清洁用品耗尽时，每日可领取一次基础补给，各补 2 份。</p></div><button class="secondary" id="relief-button">领取基础补给</button></div></div>`;
   } else {
     const bgCount=['food','clean','mood','energy'].filter(id=>backgroundCare[id]).length;
     el.innerHTML=`<div class="page-panel"><div class="eyebrow">MAKE YOURSELF AT HOME</div><h2>偏好与存档</h2><label class="setting-row"><span>应用内照护提醒<small>页面打开时提醒低需求；系统后台推送尚未接入。</small></span><input type="checkbox" id="reminders" ${reminderEnabled?'checked':''}></label><label class="setting-row"><span>背景音乐<small>照护进行时播放实时合成的音景，全部由浏览器本地生成，无外部音频文件。若手机处于静音模式（iOS 侧边拨片），请先取消静音。</small></span><input type="checkbox" id="bgm-enabled" ${A.pref.enabled?'checked':''}></label><label class="setting-row"><span>音景风格<small>白噪音、雨声、海浪、八音盒轻音乐、森林晨间，照护中切换即刻生效。</small></span><select id="bgm-style">${A.stylesHtml(A.pref.style)}</select></label><label class="setting-row"><span>音乐音量<small>当前 ${Math.round(A.pref.volume*100)}%，只影响背景音景。</small></span><input type="range" id="bgm-volume" min="0" max="100" value="${Math.round(A.pref.volume*100)}" style="--fill:${Math.round(A.pref.volume*100)}%"></label><div class="setting-row"><span>后台照护<small>勾选后，对应照护在切到其他标签页、应用或锁屏时按真实时间继续；关闭照护弹窗或整个页面仍会暂停并保留进度。</small></span><div class="bg-grid">${[['food','喂养'],['clean','清洁'],['mood','陪伴'],['energy','休息']].map(([id,name])=>`<label class="bg-check"><input type="checkbox" data-bg="${id}" ${backgroundCare[id]?'checked':''}>${name}</label>`).join('')}</div></div><div class="setting-row"><span>专心陪伴模式<small>前台照护保持页面可见计时；已允许后台的操作在切后台后继续累计。</small></span><span class="stage-badge">${bgCount?`后台 ${bgCount} 项`:'仅前台'}</span></div><div class="setting-row"><span>成长时间<small>现实 1 天 = 游戏 30 天，升级同时需要有效照护经验。</small></span></div><div class="setting-row"><span>导出存档<small>进度保存在此浏览器，可导出文件备份。</small></span><button class="primary" id="export-save">导出</button></div><label class="setting-row"><span>恢复存档<small>恢复前自动下载当前进度备份；支持本版本的 JSON 存档。</small></span><input id="import-save" type="file" accept=".json,application/json"></label><p>养育节奏、饮食与情绪数值采用游戏化简化。真实宝宝的喂养方式、辅食时机与营养补充，请与儿科专业人员讨论；宠物饮食请咨询兽医。小铺商品均为虚拟物资，使用游戏积分兑换。</p></div>`;
@@ -258,6 +263,10 @@ document.addEventListener('click',e=>{
   if(b.dataset.care)showCare(b.dataset.care);
   if(b.dataset.filter){shopFilter=b.dataset.filter;renderSecondary();}
   if(b.dataset.buy)execute(()=>G.buy(state,b.dataset.buy,now()),'物资已放进小屋，照护时可以使用。');
+  if(b.dataset.wear) {
+    const wasWorn=state.worn===b.dataset.wear;
+    execute(()=>G.wear(state,b.dataset.wear,now()),wasWorn?'饰物已经收好。':'饰物已经穿好，去看看小屋吧。');
+  }
   if(b.id==='relief-button')execute(()=>G.relief(state,now()),'基础补给已送达，继续温柔地陪伴吧。');
   if(b.id==='checkin-button') {
     const before=state.points;
@@ -321,7 +330,7 @@ document.addEventListener('change',async e=>{
       const loaded=G.load(await file.text(),null,Date.now());
       if(!loaded.adopted)throw Error('selection');
       if(!confirm('恢复这份存档？当前进度会先自动导出备份。'))return;
-      exportSave();pause();state=loaded;loadFailed=false;save();$('room-art').innerHTML='';navigate('home');toast('存档已恢复，欢迎回到小屋。');
+      exportSave();pause();state=loaded;loadFailed=false;save();delete $('room-art').dataset.sceneKey;$('room-art').innerHTML='';navigate('home');toast('存档已恢复，欢迎回到小屋。');
     }catch{toast('文件格式或数据无效，请选择本游戏导出的有效存档。');}
   }
 });
@@ -332,7 +341,7 @@ window.addEventListener('pagehide',pause);
 // Another tab owns the newest save; pause this tab before adopting its state.
 window.addEventListener('storage',e=>{
   if(e.key!==saveKey||!e.newValue)return;
-  try{running=false;state=G.load(e.newValue,null,Date.now());$('care-dialog').close();careId=null;$('room-art').innerHTML='';if(state.adopted)$('adopt-dialog').close();render();toast('已同步另一页面的进度，请在一个页面中照护。');}catch{toast('另一页面的存档暂时无法同步。');}
+  try{running=false;state=G.load(e.newValue,null,Date.now());$('care-dialog').close();careId=null;delete $('room-art').dataset.sceneKey;$('room-art').innerHTML='';if(state.adopted)$('adopt-dialog').close();render();toast('已同步另一页面的进度，请在一个页面中照护。');}catch{toast('另一页面的存档暂时无法同步。');}
 });
 setInterval(tick,250);
 setInterval(()=>{

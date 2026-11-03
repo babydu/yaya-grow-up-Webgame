@@ -20,3 +20,15 @@
 .setting-row input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:#e2e7d8}
 .setting-row input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:#7b8d69}
 .setting-row input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #748666;box-shadow:0 1px 3px rgba(92,107,79,.25)}
+
+/* ── design-pack integration ─────────────────────────────── */
+.portrait{object-fit:cover}
+.adopt-options{grid-template-columns:repeat(4,1fr)}
+.acc-thumb{width:56px;height:56px;object-fit:contain;background:#f7f5ef;border-radius:16px;padding:6px;margin-bottom:8px}
+.shop-item.acc-item{background:#fffdf9}
+.milestone .stage-thumb{width:100%;height:130px;object-fit:contain;margin-bottom:12px;background:#f7f5ef;border-radius:10px;padding:6px}
+.acc-worn{filter:drop-shadow(0 2px 3px #0002)}
+@media(max-width:600px){
+  .adopt-options{grid-template-columns:1fr 1fr}
+  .milestone .stage-thumb{height:96px}
+}
