@@ -68,6 +68,16 @@
     gain.gain.linearRampToValueAtTime(Math.max(0.0001, to), t + seconds);
   }
 
+  function gradualFade(gain, seconds) {
+    const t = ctx.currentTime;
+    gain.gain.cancelScheduledValues(t);
+    gain.gain.setValueAtTime(0.0001, t);
+    const steps = 24;
+    for (let i = 1; i <= steps; i++) {
+      gain.gain.linearRampToValueAtTime(Math.pow(i / steps, 2.2), t + seconds * (i / steps));
+    }
+  }
+
   function teardown(c, fadeSeconds) {
     if (!c) return;
     (c.timers || []).forEach(clearTimeout);
@@ -296,7 +306,7 @@
     try {
       current = build(pref.style);
       current.styleId = pref.style;
-      fade(current.bus, 1, 0.8);
+      gradualFade(current.bus, 3);
       return true;
     } catch {
       current = null;
@@ -326,7 +336,7 @@
         try {
           current = build(id);
           current.styleId = id;
-          fade(current.bus, 1, 0.6);
+          gradualFade(current.bus, 2);
         } catch {
           current = null;
           ok = false;

@@ -48,10 +48,13 @@ graph TD
 
 所有合成图共用一条 `master gain`（映射为 `volume × 0.85`），淡入淡出统一在 master 上做 ramp。八音盒与森林的音符调度链在 AudioContext 处于 suspended 时跳过出音并延时重试，避免恢复播放时时间戳堆积。
 
+音景总线启动与切换采用 `gradualFade`：24 段线性 ramp 按幂函数 2.2 的缓入曲线从 0.0001 渐进抬升，开始播放约 3 秒、中途换风格约 2 秒达到目标音量，起始接近无声。停止仍走 1 秒线性淡出。
+
 ### game.js 集成点
 
 - 启动时 `loadPref()`。
 - 设置页（renderSecondary 的 settings 分支）新增三行：背景音乐开关、音景风格下拉、音量滑块；change 事件调用对应 setter，写库失败时沿用现有 toast 降级文案。
+- 音量滑块采用自定义轨道与拖块样式（`--fill` 变量驱动已填充轨道），并监听 `input` 事件实时更新音量、轨道填充与百分比提示；`.setting-row input` 的 20px 通用规则通过 range 专属规则覆盖，保证移动端可拖动。
 - `toggleCare()` 中 `running=true` 后调用 `play()`，并在 1.5 秒后检查 `A.blocked`：若浏览器仍未放行声音则 toast 提示用户轻点屏幕。
 - `pause()` 中调用 `stop()`（覆盖切后台、锁屏、关闭弹窗、翻页）。
 - `tick()` 照护完成分支调用 `stop()`。
