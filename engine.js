@@ -179,13 +179,17 @@
       assert(typeof t.name === 'string' && t.name.length > 0 && t.name.length <= 200);
       assert(integer(t.seconds, 3600) && t.seconds > 0 && number(t.elapsed, t.seconds));
       assert(t.productId === null || typeof t.productId === 'string');
+      if (own(t, 'quantity')) assert(integer(t.quantity) && t.quantity >= 1 && t.quantity <= 12);
+      const units = t.quantity || 1;
+      assert(t.productId === null ? units === 1 : true);
       const categories = { food: ['food', 'nutrition'], clean: ['clean'], mood: ['comfort'], energy: [] };
       // A paid task keeps its original product and duration after a stage change.
       assert(t.productId === null ? ['mood', 'energy'].includes(t.actionId)
         : catalog.some(p => p.id === t.productId && p.types.includes(s.selected)
           && p.minStage <= stage(s).index && categories[t.actionId].includes(p.category)));
-      assert(t.actionId === 'food' ? [300, 240, 180, 120].includes(t.seconds)
-        : t.seconds === legacyDurations[ids.indexOf(t.actionId)]);
+      assert(t.actionId === 'food'
+        ? [300, 240, 180, 120].some(base => base * units === t.seconds)
+        : legacyDurations[ids.indexOf(t.actionId)] * units === t.seconds);
     }
     if (s.selected === null) assert(!s.adopted && s.task === null && s.stageIndex === 0);
     return s;
@@ -333,7 +337,7 @@
         description: ['适量喂养，饱腹达到 80 时暂停喂养。', '保持干净舒适。', '专注陪伴。', '安心休息。'][i] };
     });
   }
-  function begin(s, actionId, productId, now) {
+  function begin(s, actionId, productId, now, quantity) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
     if (!ids.includes(actionId)) return '照护动作无效';
@@ -341,6 +345,9 @@
     if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
     if (s.task) return s.task.actionId === actionId && s.task.productId === pid ? null : '请先完成当前任务';
     if (s.health < 20 && actionId === 'mood') return '太虚弱了，先照顾好身体';
+    const units = quantity === undefined ? 1 : quantity;
+    if (!Number.isInteger(units) || units < 1 || units > 99) return '物资数量无效';
+    if (pid === null && units !== 1) return '这种照护无需选择数量';
     const option = careOptions(s).find(a => a.id === actionId);
     const index = ids.indexOf(actionId);
     if (s.needs[index] >= (actionId === 'food' ? 80 : 95)) return '当前需求已满足';
@@ -348,10 +355,11 @@
     const p = products(s, actionId).find(item => item.id === pid);
     if (pid !== null && !p) return '商品不适用于当前对象、动作或阶段';
     if (pid === null && ['food', 'clean'].includes(actionId)) return '请选择消耗品';
-    if (p && !(s.inventory[p.id] > 0)) return '库存不足';
-    if (p) s.inventory[p.id]--;
-    s.task = { actionId, productId: pid, name: option.name, seconds: option.seconds,
-      elapsed: Math.min(option.seconds, s.progress ? s.progress[index] : 0) };
+    if (p && !(s.inventory[p.id] >= units)) return '库存不足';
+    if (p) s.inventory[p.id] -= units;
+    const seconds = option.seconds * units;
+    s.task = { actionId, productId: pid, name: option.name, seconds, quantity: units,
+      elapsed: Math.min(seconds, s.progress ? s.progress[index] : 0) };
     if (s.progress) s.progress[index] = 0;
     return null;
   }
@@ -367,7 +375,8 @@
     if (t.elapsed < t.seconds) return null;
     const i = ids.indexOf(t.actionId);
     const p = catalog.find(item => item.id === t.productId);
-    const gain = p ? p.gain : ids.map((_, j) => i === j ? [45, 45, 35, 40][i] : 0);
+    const units = t.quantity || 1;
+    const gain = p ? p.gain.map(v => v * units) : ids.map((_, j) => i === j ? [45, 45, 35, 40][i] : 0);
     const effective = s.needs.some((v, j) => gain[j] > 0 && v < 100);
     s.needs = s.needs.map((v, j) => Math.min(100, v + gain[j]));
     s.count = Math.min(LIMIT, s.count + 1);
@@ -383,7 +392,8 @@
     }
     s.points += points;
     s.daily.earned += points;
-    const message = `${t.name}完成，成长 +${growth}，积分 +${points}。`;
+    const label = units > 1 ? `${t.name} × ${units}` : t.name;
+    const message = `${label}完成，成长 +${growth}，积分 +${points}。`;
     log(s, now, message);
     rewardStages(s, now);
     rewardEmotions(s, now);

@@ -17,7 +17,7 @@ const assert = require('node:assert/strict');
     assert.match(await page.locator('#wallet-points').innerText(), /71/);
     await page.locator('[data-care="food"]').click();
     await page.locator('#care-toggle').click();
-    await page.waitForTimeout(1300);
+    await page.waitForFunction(() => document.querySelector('#timer').innerText !== '05:00', null, { timeout: 8000 });
     assert.notEqual(await page.locator('#timer').innerText(), '05:00');
     await page.locator('#care-toggle').click();
     const paused = await page.locator('#timer').innerText();
@@ -186,7 +186,10 @@ const assert = require('node:assert/strict');
       await page.setViewportSize({ width, height: 900 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     }
-    await page.screenshot({ path: '/tmp/opencode/slow-growing-v2.png', fullPage: true });
+    for (let attempt = 0, shot = false; !shot; attempt++) {
+      try { await page.screenshot({ path: '/tmp/opencode/slow-growing-v2.png', fullPage: true }); shot = true; }
+      catch (error) { if (attempt >= 2) throw error; }
+    }
     assert.deepEqual(errors, []);
     const mobile = await browser.newPage({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
     await mobile.goto('http://localhost:8000', { waitUntil: 'domcontentloaded' });

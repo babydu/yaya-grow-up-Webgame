@@ -182,13 +182,30 @@ function showCare(id) {
   const products=G.products(state,id);
   if(state.task) {
     const item=G.catalog.find(p=>p.id===state.task.productId);
-    $('care-products').innerHTML=`<div class="reserved-item">${icon('check')}${item?item.name+' · 已取用 1 份':'专心陪伴 · 无需物资'}<small>继续照护会沿用本次物资</small></div>`;
+    $('care-products').innerHTML=`<div class="reserved-item">${icon('check')}${item?item.name+` · 已取用 ${state.task.quantity||1} 份`:'专心陪伴 · 无需物资'}<small>继续照护会沿用本次物资</small></div>`;
   } else {
-    $('care-products').innerHTML=products.length?`<label class="product-label" for="care-product">本次使用</label><select id="care-product">${id==='mood'?'<option value="">徒手互动 · 无需物资</option>':''}${products.map(p=>`<option value="${p.id}" ${(state.inventory[p.id]||0)===0?'disabled':''}>${p.name} · 库存 ${state.inventory[p.id]||0} 份</option>`).join('')}</select><small class="care-hint">开始时消耗 1 份；暂停和继续沿用已取用物资。</small>`:'<div class="reserved-item">安心在身边，已经足够。</div>';
+    $('care-products').innerHTML=products.length?`<label class="product-label" for="care-product">本次使用</label><select id="care-product">${id==='mood'?'<option value="">徒手互动 · 无需物资</option>':''}${products.map(p=>`<option value="${p.id}" ${(state.inventory[p.id]||0)===0?'disabled':''}>${p.name} · 库存 ${state.inventory[p.id]||0} 份</option>`).join('')}</select><div id="quantity-holder"></div><small class="care-hint">开始时按选定份数消耗；暂停和继续沿用已取用物资。</small>`:'<div class="reserved-item">安心在身边，已经足够。</div>';
     if((id==='food'||id==='clean')&&!products.some(p=>state.inventory[p.id]>0))$('care-products').innerHTML='<div class="empty-stock">适龄物资用完了，先给小屋补充一点吧。<button class="secondary" id="care-shop">去生活小铺</button></div>';
+    refreshCareQuantity();
   }
   updateTimer();
   $('care-dialog').showModal();
+}
+const needIndex={food:0,clean:1,mood:2,energy:3};
+function refreshCareQuantity() {
+  const holder=$('quantity-holder');
+  if(!holder)return;
+  const pid=$('care-product')?.value||null;
+  const p=G.catalog.find(item=>item.id===pid);
+  if(!p){holder.innerHTML='';return;}
+  const stock=state.inventory[p.id]||0;
+  if(stock<2){holder.innerHTML='';return;}
+  const idx=needIndex[careId];
+  const perUnit=p.gain[idx]>0?p.gain[idx]:[45,45,35,40][idx];
+  const maxQ=Math.max(1,Math.min(stock,Math.ceil((100-state.needs[idx])/perUnit),10));
+  if(maxQ<2){holder.innerHTML='';return;}
+  const options=Array.from({length:maxQ},(_,i)=>`<option value="${i+1}" ${i===0?'selected':''}>${i+1} 份</option>`).join('');
+  holder.innerHTML=`<label class="product-label" for="care-quantity">使用份数</label><select id="care-quantity">${options}</select><small class="care-hint">份数越多，照护耗时和效果都按比例增加。</small>`;
 }
 let bgmShown=null;
 function renderBgmNow() {
@@ -205,7 +222,8 @@ function updateTimer() {
   renderBgmNow();
   if(!careId)return;
   const task=state.task;
-  const seconds=task?.seconds||G.careOptions(state).find(a=>a.id===careId).seconds;
+  const quantity=task?task.quantity||1:+($('care-quantity')?.value)||1;
+  const seconds=task?.seconds||G.careOptions(state).find(a=>a.id===careId).seconds*quantity;
   const remaining=Math.ceil(seconds-(task?.elapsed||0));
   $('timer').textContent=`${String(Math.floor(remaining/60)).padStart(2,'0')}:${String(remaining%60).padStart(2,'0')}`;
   const progress=(task?.elapsed||0)/seconds*100;
@@ -226,10 +244,13 @@ function toggleCare() {
   if(running){pause();return;}
   if(document.hidden)return;
   if(!state.task) {
-    const error=G.begin(state,careId,$('care-product')?.value||null,now());
+    const pid=$('care-product')?.value||null;
+    const quantity=pid?+($('care-quantity')?.value)||1:undefined;
+    const error=G.begin(state,careId,pid,now(),quantity);
     if(error){toast(error);return;}
     const item=G.catalog.find(p=>p.id===state.task.productId);
-    $('care-products').innerHTML=`<div class="reserved-item">${icon('check')}${item?item.name+' · 已取用 1 份':'专心陪伴 · 无需物资'}</div>`;
+    const units=state.task.quantity||1;
+    $('care-products').innerHTML=`<div class="reserved-item">${icon('check')}${item?item.name+` · 已取用 ${units} 份`:'专心陪伴 · 无需物资'}</div>`;
     save();
   }
   running=true;
@@ -322,6 +343,8 @@ document.addEventListener('input',e=>{
   }
 });
 document.addEventListener('change',async e=>{
+  if(e.target.id==='care-product')refreshCareQuantity();
+  if(e.target.id==='care-quantity')updateTimer();
   if(e.target.id==='reminders') {
     reminderEnabled=e.target.checked;
     try{localStorage.setItem('slow-growing-reminders',reminderEnabled?'on':'off');}catch{toast('偏好已在本次会话生效。');}

@@ -730,3 +730,50 @@ test('legacy v2 saves default to healthy and reject corrupt health or status', (
   brokenWindow.status = 'left';
   assert.throws(() => G.load(brokenWindow, null, NOW + HOUR));
 });
+
+test('care quantities scale stock cost, duration and gains', () => {
+  const s = pet();
+  assert.equal(typeof G.begin(s, 'mood', null, NOW, 2), 'string');
+  assert.equal(s.task, null);
+  s.needs[0] = 20;
+  assert.equal(G.begin(s, 'food', 'cat-milk', NOW, 2), null);
+  assert.equal(s.inventory['cat-milk'], 3);
+  assert.equal(s.task.quantity, 2);
+  assert.equal(s.task.seconds, 600);
+  assert.equal(G.begin(s, 'food', 'cat-milk', NOW), null);
+  assert.equal(s.inventory['cat-milk'], 3);
+  const result = G.advance(s, s.task.seconds, s.updated);
+  assert.match(result.message, /× 2/);
+  assert.equal(s.needs[0], 100);
+  assert.equal(s.needs[3], 80);
+  const single = pet();
+  assert.equal(G.begin(single, 'food', 'cat-milk', NOW), null);
+  assert.equal(single.task.quantity, 1);
+  assert.equal(single.task.seconds, 300);
+  const short = pet();
+  assert.equal(typeof G.begin(short, 'food', 'cat-milk', NOW, 6), 'string');
+  assert.equal(short.task, null);
+  assert.equal(short.inventory['cat-milk'], 5);
+});
+
+test('validation scales task seconds by quantity and rejects mismatches', () => {
+  const s = pet();
+  s.needs[0] = 20;
+  G.begin(s, 'food', 'cat-milk', NOW, 3);
+  assert.equal(s.task.seconds, 900);
+  const loaded = G.load(JSON.stringify(s), null, s.updated);
+  assert.equal(loaded.task.seconds, 900);
+  const overLimit = JSON.parse(JSON.stringify(s));
+  overLimit.task.quantity = 13;
+  assert.throws(() => G.load(overLimit, null, s.updated));
+  const zeroQty = JSON.parse(JSON.stringify(s));
+  zeroQty.task.quantity = 0;
+  assert.throws(() => G.load(zeroQty, null, s.updated));
+  const badSeconds = JSON.parse(JSON.stringify(s));
+  badSeconds.task.seconds = 800;
+  assert.throws(() => G.load(badSeconds, null, s.updated));
+  const freeUnits = JSON.parse(JSON.stringify(s));
+  freeUnits.task.productId = null;
+  freeUnits.task.seconds = 300;
+  assert.throws(() => G.load(freeUnits, null, s.updated));
+});
