@@ -179,6 +179,7 @@ function showCare(id) {
   $('care-title').textContent=`${option.name} · ${profile().name}`;
   $('care-description').textContent={food:'准备一份适龄食物，坐下来，陪着慢慢吃。',clean:'整理、清洁、更换，每一步都让生活舒服一点。',mood:'一段专心的时间，是今天最好的小礼物。',energy:'把周围的声音放轻，陪着慢慢安静下来。'}[id];
   $('dialog-icon').innerHTML=icon(option.icon);
+  $('care-mode-hint').textContent=backgroundCare[id]?`已开启${option.name}的后台照护：切到其他标签页、应用或锁屏也会按真实时间继续；关闭弹窗或页面会暂停并保留进度。`:'点击开始后留在此界面即可。切换标签页或锁屏自动暂停，返回后可继续；已使用的物资与进度会保留。';
   const products=G.products(state,id);
   if(state.task) {
     const item=G.catalog.find(p=>p.id===state.task.productId);
