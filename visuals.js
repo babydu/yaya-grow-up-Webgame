@@ -87,7 +87,7 @@
       plant: '团子在魔法花园的花藤拱门下等你'
     };
     const backdrops = { cat: '#f6ecd4', dog: '#f2e8d0', baby: '#e9f0e3', plant: '#f4e7e2' };
-    const badge = tier === 'sick'
+    const badge = tier === 'sick' || tier === 'critical'
       ? `<g class="sick-flag" transform="translate(486 66)"><rect x="-46" y="-16" width="92" height="32" rx="16" fill="#fffdf6" stroke="#d9a57e" stroke-width="1.5"/><path fill="#d9a57e" transform="translate(-32 -11) scale(.92)" d="${paths.heart}"/><text x="6" y="5" text-anchor="middle" font-size="13" fill="#a8705a">生病了</text></g>`
       : '';
     return `<svg viewBox="0 0 620 362" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${name}在自己的小天地里等待你的照顾">

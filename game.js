@@ -113,7 +113,7 @@ function render() {
   const fill = $('health-fill');
   fill.style.width = `${state.health}%`;
   fill.dataset.tier = tier === 'left' ? 'critical' : tier;
-  if (tier === 'critical') {
+  if (tier === 'critical' && state.criticalAt !== null) {
     const hours = Math.max(1, Math.ceil(24 - (now() - state.criticalAt) / 3600000));
     const owned = (state.inventory['revive-elixir'] || 0) > 0;
     $('critical-banner').hidden = false;

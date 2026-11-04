@@ -150,6 +150,11 @@ const assert = require('node:assert/strict');
     assert.equal(healed.inventory['medicine-kit'], 0);
     assert.equal(await page.locator('#health-fill').getAttribute('data-tier'), 'low');
     assert.equal(await page.locator('#room-art .sick-flag').count(), 0);
+    await page.evaluate(() => { state.health = 10; state.criticalAt = null; localStorage.setItem('slow-growing-v2', JSON.stringify(state)); });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    assert.equal(await page.locator('#critical-banner').isVisible(), false);
+    assert.equal(await page.locator('#health-fill').getAttribute('data-tier'), 'critical');
+    assert.equal(await page.locator('#room-art .sick-flag').count(), 1);
     await page.evaluate(() => {
       state.health = 0;
       state.criticalAt = Date.now() - 3600000;
