@@ -41,7 +41,7 @@ test('CommonJS and native window exports, immutable definitions, isolated states
     for (const k of ['id', 'name', 'icon', 'category', 'types', 'minStage', 'price', 'pack', 'description', 'gain']) {
       assert.ok(Object.hasOwn(p, k));
     }
-    assert.ok(['food', 'clean', 'comfort', 'nutrition', 'accessory'].includes(p.category));
+    assert.ok(['food', 'clean', 'comfort', 'nutrition', 'accessory', 'medical'].includes(p.category));
   }
 });
 
@@ -88,6 +88,7 @@ test('growth requires time AND care experience, all four stages and one-time rew
 test('completion can unlock growth and reports care reward', () => {
   const s = pet();
   G.refresh(s, NOW + DAY);
+  s.health = 100;
   s.xp = 90;
   const result = complete(s);
   assert.equal(s.xp, 100);
@@ -445,6 +446,7 @@ test('three emotional tiers and mature baby hugs', () => {
     s.bond = bond;
     s.xp = 600;
     G.refresh(s, NOW + 12 * DAY);
+    s.health = 100;
     assert.match(G.touch(s, s.updated).message, /拥抱/);
   }
 });
@@ -580,4 +582,151 @@ test('worn accessory defaults to null for legacy v2 saves and resets on adopt', 
   const adopted = G.adopt(G.create(NOW), 'plant', NOW);
   assert.equal(adopted.worn, null);
   assert.ok(adopted.inventory['plant-milk'] === 5 && adopted.inventory['plant-clean'] === 5);
+});
+
+test('health drains per starving need with cap and recovers when needs stay satisfied', () => {
+  const s = pet();
+  s.needs = [0, 100, 100, 100];
+  G.refresh(s, s.updated + 2 * HOUR);
+  assert.equal(s.health, 98.5);
+  const full = pet();
+  full.needs = [0, 0, 0, 0];
+  G.refresh(full, full.updated + 10 * HOUR);
+  assert.equal(full.health, 70);
+  const rising = pet();
+  rising.needs = [80, 80, 80, 80];
+  rising.health = 50;
+  G.refresh(rising, rising.updated + HOUR / 2);
+  assert.equal(rising.health, 50.5);
+  const cared = pet();
+  cared.health = 50;
+  complete(cared, 'mood');
+  assert.equal(cared.health, 52);
+  const again = G.refresh(structuredClone(full), full.updated);
+  assert.equal(again.health, full.health);
+  assert.equal(again.criticalAt, full.criticalAt);
+});
+
+test('sickness tiers reduce growth and lock play while care keeps working', () => {
+  const s = pet();
+  s.health = 30;
+  const sick = complete(s, 'mood');
+  assert.match(sick.message, /成长 \+5/);
+  assert.equal(s.xp, 5);
+  assert.equal(s.health, 32);
+  const weak = pet();
+  weak.health = 15;
+  assert.equal(G.touch(weak, weak.updated).message, '橘汐太虚弱了，先照顾好身体');
+  assert.equal(typeof G.begin(weak, 'mood', null, weak.updated), 'string');
+  assert.equal(G.begin(weak, 'food', 'cat-milk', weak.updated), null);
+  assert.equal(G.checkin(weak, weak.updated), null);
+  assert.equal(G.buy(weak, 'cat-clean', weak.updated), null);
+  assert.equal(G.healthTier(pet()), 'healthy');
+  const low = pet(); low.health = 55; assert.equal(G.healthTier(low), 'low');
+  const ill = pet(); ill.health = 30; assert.equal(G.healthTier(ill), 'sick');
+  const bad = pet(); bad.health = 10; assert.equal(G.healthTier(bad), 'critical');
+  assert.equal(G.healthTier(G.create(NOW)), null);
+});
+
+test('medicine kit heals with purchase gate and stock handling', () => {
+  const s = pet();
+  assert.equal(G.buy(s, 'medicine-kit', s.updated), '橘汐很健康，暂不需要药箱');
+  s.health = 50;
+  assert.equal(G.buy(s, 'medicine-kit', s.updated), null);
+  assert.equal(s.points, 35);
+  s.health = 100;
+  assert.equal(G.remedy(s, 'medicine-kit', s.updated), '橘汐很健康，暂不需要药箱');
+  s.health = 50;
+  assert.equal(G.remedy(s, 'medicine-kit', s.updated), null);
+  assert.equal(s.health, 90);
+  assert.equal(s.inventory['medicine-kit'], 0);
+  s.health = 50;
+  assert.equal(G.remedy(s, 'medicine-kit', s.updated), '库存不足，请先在生活小铺兑换');
+  s.health = 30;
+  s.points += 60;
+  assert.equal(G.buy(s, 'revive-elixir', s.updated), null);
+  assert.equal(G.remedy(s, 'revive-elixir', s.updated), '橘汐还没有病危，灵药先收好');
+});
+
+test('critical window, elixir revival and re-entry', () => {
+  const s = pet();
+  s.needs = [0, 0, 0, 0];
+  G.refresh(s, s.updated + 40 * HOUR);
+  assert.equal(s.health, 0);
+  assert.equal(s.criticalAt, s.updated);
+  assert.match(s.logs.at(-1).text, /病危/);
+  assert.equal(G.healthTier(s), 'critical');
+  s.points += 60;
+  assert.equal(G.buy(s, 'revive-elixir', s.updated), null);
+  assert.equal(G.remedy(s, 'revive-elixir', s.updated), null);
+  assert.equal(s.health, 40);
+  assert.equal(s.criticalAt, null);
+  assert.equal(s.status, 'alive');
+  assert.match(s.logs.at(-1).text, /慢慢缓了过来/);
+  s.needs = [0, 0, 0, 0];
+  G.refresh(s, s.updated + 40 * HOUR);
+  assert.equal(s.health, 0);
+  assert.equal(s.criticalAt, s.updated);
+});
+
+test('natural recovery above 20 clears the critical window', () => {
+  const s = pet();
+  s.health = 19.5;
+  s.criticalAt = s.updated;
+  s.needs = [80, 80, 80, 80];
+  G.refresh(s, s.updated + HOUR);
+  assert.equal(s.health, 20.5);
+  assert.equal(s.criticalAt, null);
+  assert.match(s.logs.at(-1).text, /稳定/);
+});
+
+test('departure after the window, per-type narrative and full reset via restart', () => {
+  const flavor = { baby: /家人.*远方/, cat: /夜色.*远行/, dog: /田野.*远行/, plant: /枯萎.*春泥/ };
+  for (const [type, pattern] of Object.entries(flavor)) {
+    const s = pet(type);
+    s.needs = [0, 0, 0, 0];
+    G.refresh(s, s.updated + 40 * HOUR);
+    G.refresh(s, s.updated + 25 * HOUR);
+    assert.equal(s.status, 'left');
+    assert.equal(s.leftAt, s.updated);
+    assert.equal(s.task, null);
+    assert.match(s.logs.at(-1).text, pattern);
+    assert.equal(G.healthTier(s), 'left');
+    assert.equal(typeof G.begin(s, 'food', type + '-milk', s.updated), 'string');
+    assert.equal(G.touch(s, s.updated).rewarded, false);
+    assert.equal(typeof G.checkin(s, s.updated), 'string');
+    assert.equal(typeof G.buy(s, 'cat-clean', s.updated), 'string');
+    assert.equal(typeof G.wear(s, null, s.updated), 'string');
+    assert.equal(typeof G.relief(s, s.updated), 'string');
+    assert.equal(typeof G.remedy(s, 'revive-elixir', s.updated), 'string');
+    const memorial = G.load(JSON.stringify(s), null, s.updated + HOUR);
+    assert.equal(memorial.status, 'left');
+    assert.throws(() => G.restart(pet(), NOW), /离开/);
+    G.restart(s, s.updated);
+    assert.equal(s.selected, null);
+    assert.equal(s.adopted, false);
+    assert.equal(s.health, 100);
+    assert.equal(s.status, 'alive');
+    assert.equal(s.criticalAt, null);
+    assert.equal(s.leftAt, null);
+    const fresh = G.adopt(structuredClone(s), type, s.updated);
+    assert.equal(fresh.stageIndex, 0);
+  }
+});
+
+test('legacy v2 saves default to healthy and reject corrupt health or status', () => {
+  const raw = JSON.parse(JSON.stringify(pet('dog')));
+  delete raw.health; delete raw.status; delete raw.criticalAt; delete raw.leftAt;
+  const loaded = G.load(raw, null, NOW + HOUR);
+  assert.equal(loaded.health, 100);
+  assert.equal(loaded.status, 'alive');
+  const brokenHealth = JSON.parse(JSON.stringify(pet('dog')));
+  brokenHealth.health = 'full';
+  assert.throws(() => G.load(brokenHealth, null, NOW + HOUR));
+  const brokenStatus = JSON.parse(JSON.stringify(pet('dog')));
+  brokenStatus.status = 'dead';
+  assert.throws(() => G.load(brokenStatus, null, NOW + HOUR));
+  const brokenWindow = JSON.parse(JSON.stringify(pet('dog')));
+  brokenWindow.status = 'left';
+  assert.throws(() => G.load(brokenWindow, null, NOW + HOUR));
 });

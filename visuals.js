@@ -45,13 +45,14 @@
     return `<img class="portrait" src="${src}" alt="" aria-hidden="true">`;
   }
 
-  function companion(type, stageIndex, worn) {
+  function companion(type, stageIndex, worn, tier) {
     const n = Math.min(3, Math.max(0, stageIndex || 0));
     const dim = (DIMS[type] || DIMS.cat)[n];
     const d = (HEIGHTS[type] || HEIGHTS.cat)[n];
     const iw = +(dim[0] * d / dim[1]).toFixed(1);
     const ix = +(CENTER_X - iw / 2).toFixed(1);
     const iy = +(BASE_Y - d).toFixed(1);
+    const sick = tier === 'sick' || tier === 'critical' ? ' data-sick="true"' : '';
     let acc = '';
     if (worn) {
       const adim = DIMS.acc[worn];
@@ -65,7 +66,7 @@
       }
     }
     return `<ellipse cx="${CENTER_X}" cy="${BASE_Y}" rx="${(iw * 0.42).toFixed(1)}" ry="9" fill="#b8a97e" opacity=".28"/>
-      <image class="pet-breathe" data-character="${type}" data-stage="${n}" href="assets/stages/${type}-${n + 1}.png" x="${ix}" y="${iy}" width="${iw}" height="${d}" preserveAspectRatio="xMidYMid meet"/>${acc}`;
+      <image class="pet-breathe"${sick} data-character="${type}" data-stage="${n}" href="assets/stages/${type}-${n + 1}.png" x="${ix}" y="${iy}" width="${iw}" height="${d}" preserveAspectRatio="xMidYMid meet"/>${acc}`;
   }
 
   function hearts() {
@@ -76,7 +77,7 @@
     </g>`;
   }
 
-  function scene(type, stageIndex, worn) {
+  function scene(type, stageIndex, worn, tier) {
     const engine = window.GameEngine;
     const name = (engine && engine.profiles[type] && engine.profiles[type].name) || '';
     const labels = {
@@ -86,11 +87,15 @@
       plant: '团子在魔法花园的花藤拱门下等你'
     };
     const backdrops = { cat: '#f6ecd4', dog: '#f2e8d0', baby: '#e9f0e3', plant: '#f4e7e2' };
+    const badge = tier === 'sick'
+      ? `<g class="sick-flag" transform="translate(486 66)"><rect x="-46" y="-16" width="92" height="32" rx="16" fill="#fffdf6" stroke="#d9a57e" stroke-width="1.5"/><path fill="#d9a57e" transform="translate(-32 -11) scale(.92)" d="${paths.heart}"/><text x="6" y="5" text-anchor="middle" font-size="13" fill="#a8705a">生病了</text></g>`
+      : '';
     return `<svg viewBox="0 0 620 362" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${name}在自己的小天地里等待你的照顾">
       <rect width="620" height="362" fill="${backdrops[type] || backdrops.cat}"/>
       <image class="room-bg" data-bg="${type}" href="assets/bg-${type}.jpg" width="620" height="362" preserveAspectRatio="xMidYMid slice"/>
-      ${companion(type, stageIndex, worn)}
+      ${companion(type, stageIndex, worn, tier)}
       ${hearts()}
+      ${badge}
       <title>${labels[type] || labels.cat}</title>
     </svg>`;
   }

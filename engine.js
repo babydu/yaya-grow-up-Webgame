@@ -76,6 +76,10 @@
     [50, 0, 0, 15], '每份含适龄花肥与营养液，可作为一次完整养护。');
   product('plant-toy', '植物陪伴小风铃', 'heart', 'comfort', ['plant'], 0, 12, 3,
     [0, 0, 45, 0], '晒太阳时挂在盆边，叮咚作响陪它度过一段时光。');
+  product('medicine-kit', '安心药箱', 'heart', 'medical', ['baby', 'cat', 'dog', 'plant'], 0, 25, 1,
+    [0, 0, 0, 0], '健康度低于 70 时使用，立即恢复 40 点健康度。');
+  product('revive-elixir', '回春灵药', 'spark', 'medical', ['baby', 'cat', 'dog', 'plant'], 0, 60, 1,
+    [0, 0, 0, 0], '病危宽限期内使用，恢复至 40 点健康度，错过时机则无效。');
   const accessoryFlavor = {
     baby: [['针织小帽', '薄荷绿 · 顶绒球'], ['刺绣围兜', '桃粉 · 叶形绣样'], ['软底学步鞋', '奶白 · 单颗纽扣'], ['木质牙胶环', '原木 · 彩虹串珠']],
     cat: [['针织围巾', '鼠尾草绿 · 流苏'], ['铃铛项圈', '雾蓝 · 黄铜铃'], ['毛线球', '奶白 · 手缠绕线'], ['木质鱼吊坠', '原木 · 挂绳']],
@@ -141,6 +145,17 @@
       assert(acc && acc.category === 'accessory' && acc.types.includes(s.selected)
         && (s.inventory[s.worn] || 0) > 0);
     }
+    if (own(s, 'health')) assert(number(s.health, 100));
+    if (own(s, 'status')) {
+      assert(s.status === 'alive' || s.status === 'left');
+      if (s.status === 'left') {
+        assert(timestamp(s.criticalAt) && timestamp(s.leftAt)
+          && s.criticalAt <= s.updated && s.leftAt <= s.updated && s.leftAt >= s.criticalAt);
+      } else {
+        assert(s.leftAt === null
+          && (s.criticalAt === null || (timestamp(s.criticalAt) && s.criticalAt <= s.updated)));
+      }
+    }
     assert(Array.isArray(s.logs) && s.logs.length <= 1000);
     for (const log of s.logs) assert(record(log) && timestamp(log.at) && log.at <= s.updated
       && typeof log.text === 'string' && log.text.length <= 4000);
@@ -184,6 +199,7 @@
     return { version: 2, selected: null, adopted: false, born: now, updated: now,
       needs: [40, 75, 65, 70], xp: 0, count: 0, seconds: 0, bond: 0, points: 60,
       inventory: {}, logs: [], task: null, lastCare: {}, emotionalMilestones: [], worn: null,
+      health: 100, status: 'alive', criticalAt: null, leftAt: null,
       daily: { date: date(now), seconds: 0, count: 0, earned: 0 },
       checkin: { date: '', streak: 0 }, reliefDate: '', stageIndex: 0, lastTouch: null };
   }
@@ -237,10 +253,45 @@
       const options = careOptions(s);
       s.needs = s.needs.map((v, i) => Math.max(0, v - hours * options[i].gain / options[i].intervalHours));
     }
+    if (s.adopted && s.status === 'alive') {
+      const starving = s.needs.filter(v => v < 10).length;
+      if (starving > 0) s.health = Math.max(0, s.health - Math.min(3, starving * 0.75) * hours);
+      else if (s.needs.every(v => v >= 30)) s.health = Math.min(100, s.health + hours);
+      if (s.health <= 0 && s.criticalAt === null) {
+        s.health = 0;
+        s.criticalAt = now;
+        log(s, now, `${profiles[s.selected].name}的健康度耗尽了，进入病危状态。24 小时内用回春灵药还能挽回。`);
+      }
+      if (s.criticalAt !== null && s.health >= 20) {
+        s.criticalAt = null;
+        log(s, now, `${profiles[s.selected].name}的状况稳定下来了，好好休养吧。`);
+      }
+      if (s.criticalAt !== null && now - s.criticalAt >= 24 * HOUR) leave(s, now);
+    }
     if (s.daily.date !== date(now)) s.daily = { date: date(now), seconds: 0, count: 0, earned: 0 };
     rewardStages(s, now);
     rewardEmotions(s, now);
     return s;
+  }
+  const departures = {
+    baby: '被家人接到远方照顾，临走前朝你挥了挥手。',
+    cat: '趁着夜色跳出院墙，出门远行了。',
+    dog: '趁着夜色跑向田野，出门远行了。',
+    plant: '花朵枯萎，化作春泥，把这一季的陪伴留在了土里。'
+  };
+  function leave(s, now) {
+    s.status = 'left';
+    s.leftAt = now;
+    s.task = null;
+    log(s, now, `${profiles[s.selected].name}${departures[s.selected]}`);
+  }
+  function healthTier(s) {
+    if (!s.adopted) return null;
+    if (s.status === 'left') return 'left';
+    if (s.criticalAt !== null || s.health < 20) return 'critical';
+    if (s.health < 40) return 'sick';
+    if (s.health < 70) return 'low';
+    return 'healthy';
   }
   function adopt(s, type, now) {
     clock(s, now);
@@ -287,7 +338,9 @@
     if (!s.adopted) return '请先确认养育对象';
     if (!ids.includes(actionId)) return '照护动作无效';
     const pid = productId === undefined ? null : productId;
+    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
     if (s.task) return s.task.actionId === actionId && s.task.productId === pid ? null : '请先完成当前任务';
+    if (s.health < 20 && actionId === 'mood') return '太虚弱了，先照顾好身体';
     const option = careOptions(s).find(a => a.id === actionId);
     const index = ids.indexOf(actionId);
     if (s.needs[index] >= (actionId === 'food' ? 80 : 95)) return '当前需求已满足';
@@ -322,13 +375,15 @@
     s.lastCare[t.actionId] = now;
     s.task = null;
     const points = effective ? Math.min(5, 40 - s.daily.earned, LIMIT - s.points) : 0;
+    const growth = effective ? (s.health < 40 ? 5 : 10) : 0;
     if (effective) {
-      s.xp = Math.min(LIMIT, s.xp + 10);
+      s.xp = Math.min(LIMIT, s.xp + growth);
       s.bond = Math.min(100, s.bond + 2);
+      s.health = Math.min(100, s.health + 2);
     }
     s.points += points;
     s.daily.earned += points;
-    const message = `${t.name}完成，成长 +${effective ? 10 : 0}，积分 +${points}。`;
+    const message = `${t.name}完成，成长 +${growth}，积分 +${points}。`;
     log(s, now, message);
     rewardStages(s, now);
     rewardEmotions(s, now);
@@ -337,6 +392,7 @@
   function checkin(s, now) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
+    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
     const today = date(now);
     if (s.checkin.date === today) return null;
     const yesterday = new Date(now);
@@ -351,8 +407,10 @@
   function buy(s, id, now) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
+    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
     const p = catalog.find(item => item.id === id);
     if (!p || !available(s, p)) return '商品无效或不适龄';
+    if (id === 'medicine-kit' && s.health >= 70) return `${profiles[s.selected].name}很健康，暂不需要药箱`;
     if (s.points < p.price) return '积分不足';
     if ((s.inventory[id] || 0) > LIMIT - p.pack) return '库存已达上限';
     s.points -= p.price;
@@ -363,6 +421,7 @@
   function wear(s, id, now) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
+    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
     if (id === null) {
       if (s.worn) {
         const acc = catalog.find(p => p.id === s.worn);
@@ -387,6 +446,7 @@
   function relief(s, now) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
+    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
     if (s.reliefDate === date(now)) return '今日已领取基础补给';
     let supplied = false;
     for (const action of ['food', 'clean']) {
@@ -401,9 +461,41 @@
     log(s, now, '领取基础补给，缺少的主食或清洁用品各补充 2 份。');
     return null;
   }
+  function remedy(s, id, now) {
+    refresh(s, now);
+    if (!s.adopted) return '请先确认养育对象';
+    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
+    const p = catalog.find(item => item.id === id && item.category === 'medical');
+    if (!p) return '商品无效';
+    if (!(s.inventory[id] > 0)) return '库存不足，请先在生活小铺兑换';
+    if (id === 'medicine-kit') {
+      if (s.health >= 70) return `${profiles[s.selected].name}很健康，暂不需要药箱`;
+      s.inventory[id]--;
+      s.health = Math.min(100, s.health + 40);
+      log(s, now, `使用了${p.name}，${profiles[s.selected].name}的健康度恢复到 ${Math.round(s.health)}。`);
+      return null;
+    }
+    if (id === 'revive-elixir') {
+      if (s.criticalAt === null) return `${profiles[s.selected].name}还没有病危，灵药先收好`;
+      s.inventory[id]--;
+      s.health = 40;
+      s.criticalAt = null;
+      log(s, now, `使用了${p.name}，${profiles[s.selected].name}慢慢缓了过来，接下来要好好照顾。`);
+      return null;
+    }
+    return '商品无效';
+  }
+  function restart(s, now) {
+    clock(s, now);
+    assert(s.status === 'left', '角色还没有离开');
+    Object.assign(s, create(now));
+    return s;
+  }
   function touch(s, now) {
     refresh(s, now);
     if (!s.adopted) return { message: '请先确认养育对象', rewarded: false };
+    if (s.status === 'left') return { message: `${profiles[s.selected].name}已经离开了，开始新的陪伴吧`, rewarded: false };
+    if (s.health < 20) return { message: `${profiles[s.selected].name}太虚弱了，先照顾好身体`, rewarded: false };
     const rewarded = s.lastTouch === null || now - s.lastTouch >= 60000;
     if (rewarded) {
       s.needs[2] = Math.min(100, s.needs[2] + 2);
@@ -440,6 +532,8 @@
       validate(raw);
       const s = JSON.parse(JSON.stringify(raw));
       if (s.worn === undefined) s.worn = null;
+      if (s.health === undefined) s.health = 100;
+      if (s.status === undefined) { s.status = 'alive'; s.criticalAt = null; s.leftAt = null; }
       return refresh(s, now);
     }
     if (rawV1 === null || rawV1 === undefined) return create(now);
@@ -467,5 +561,6 @@
     return refresh(JSON.parse(JSON.stringify(s)), now);
   }
   return Object.freeze({ profiles, catalog, create, adopt, load, stage, refresh, careOptions,
-    products, begin, advance, checkin, buy, wear, relief, touch, milestones });
+    products, begin, advance, checkin, buy, wear, relief, touch, milestones,
+    remedy, restart, healthTier });
 });
