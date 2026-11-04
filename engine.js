@@ -486,11 +486,11 @@
       return null;
     }
     if (id === 'revive-elixir') {
-      if (s.criticalAt === null) return `${profiles[s.selected].name}还没有病危，灵药先收好`;
+      if (s.criticalAt === null && s.health >= 70) return `${profiles[s.selected].name}状态还好，灵药先收好`;
       s.inventory[id]--;
-      s.health = 40;
+      s.health = Math.min(100, s.health + 60);
       s.criticalAt = null;
-      log(s, now, `使用了${p.name}，${profiles[s.selected].name}慢慢缓了过来，接下来要好好照顾。`);
+      log(s, now, `使用了${p.name}，${profiles[s.selected].name}的健康度恢复到 ${Math.round(s.health)}。`);
       return null;
     }
     return '商品无效';

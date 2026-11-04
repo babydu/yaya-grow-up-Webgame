@@ -645,7 +645,13 @@ test('medicine kit heals with purchase gate and stock handling', () => {
   s.health = 30;
   s.points += 60;
   assert.equal(G.buy(s, 'revive-elixir', s.updated), null);
-  assert.equal(G.remedy(s, 'revive-elixir', s.updated), '橘汐还没有病危，灵药先收好');
+  assert.equal(G.remedy(s, 'revive-elixir', s.updated), null);
+  assert.equal(s.health, 90);
+  assert.equal(s.inventory['revive-elixir'], 0);
+  s.health = 100;
+  s.points += 60;
+  assert.equal(G.buy(s, 'revive-elixir', s.updated), null);
+  assert.equal(G.remedy(s, 'revive-elixir', s.updated), '橘汐状态还好，灵药先收好');
 });
 
 test('critical window, elixir revival and re-entry', () => {
@@ -659,10 +665,10 @@ test('critical window, elixir revival and re-entry', () => {
   s.points += 60;
   assert.equal(G.buy(s, 'revive-elixir', s.updated), null);
   assert.equal(G.remedy(s, 'revive-elixir', s.updated), null);
-  assert.equal(s.health, 40);
+  assert.equal(s.health, 60);
   assert.equal(s.criticalAt, null);
   assert.equal(s.status, 'alive');
-  assert.match(s.logs.at(-1).text, /慢慢缓了过来/);
+  assert.match(s.logs.at(-1).text, /健康度恢复到/);
   s.needs = [0, 0, 0, 0];
   G.refresh(s, s.updated + 40 * HOUR);
   assert.equal(s.health, 0);
