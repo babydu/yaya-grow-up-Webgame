@@ -141,7 +141,7 @@ const assert = require('node:assert/strict');
     await mobile.locator('[data-adopt="cat"]').click();
     assert.equal(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await mobile.locator('#adopt-confirm').click();
-    await mobile.locator('aside [data-page="settings"]').click();
+    await mobile.locator('#header-settings').click();
     await mobile.locator('#bgm-enabled').check();
     await mobile.locator('#bgm-style').selectOption('music');
     await mobile.locator('nav [data-page="home"]').click();
