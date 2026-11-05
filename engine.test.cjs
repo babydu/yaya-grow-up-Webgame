@@ -851,3 +851,36 @@ test('criticalRemaining shares the night-halved countdown with the engine', () =
   assert.equal(G.criticalRemaining(pet(), NOW), null);
   G.configureNight({ enabled: false, start: 22, end: 6 });
 });
+
+test('custom pet name flows through adoption, logs and validation', () => {
+  const named = G.create(NOW);
+  G.adopt(named, 'cat', NOW, '  小橘  ');
+  assert.equal(named.name, '小橘');
+  assert.equal(G.petName(named), '小橘');
+  assert.ok(named.logs.some(l => l.text.includes('小橘')));
+  named.needs = [0, 0, 0, 0];
+  named.health = 0;
+  G.refresh(named, NOW + HOUR);
+  assert.ok(named.logs.some(l => l.text.includes('小橘') && l.text.includes('病危')));
+  named.inventory['revive-elixir'] = 1;
+  G.remedy(named, 'revive-elixir', NOW + HOUR + 60000);
+  assert.ok(named.logs.some(l => l.text.includes('小橘') && l.text.includes('健康度恢复')));
+  const unnamed = G.create(NOW);
+  G.adopt(unnamed, 'dog', NOW);
+  assert.equal(unnamed.name, null);
+  assert.equal(G.petName(unnamed), '麦芽');
+  assert.ok(unnamed.logs.some(l => l.text.includes('麦芽')));
+  assert.throws(() => G.adopt(G.create(NOW), 'cat', NOW, 'x'.repeat(13)));
+  const old = G.create(NOW);
+  G.adopt(old, 'cat', NOW);
+  const legacy = { ...old };
+  delete legacy.name;
+  assert.equal(G.petName(G.load(JSON.stringify(legacy), null, NOW)), '橘汐');
+});
+
+test('empty name input falls back to the default name', () => {
+  const s = G.create(NOW);
+  G.adopt(s, 'cat', NOW, '   ');
+  assert.equal(s.name, null);
+  assert.equal(G.petName(s), '橘汐');
+});

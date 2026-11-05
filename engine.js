@@ -171,6 +171,9 @@
         && (s.inventory[s.worn] || 0) > 0);
     }
     if (own(s, 'health')) assert(number(s.health, 100));
+    if (own(s, 'name') && s.name !== null) {
+      assert(typeof s.name === 'string' && s.name.length >= 1 && s.name.length <= 12);
+    }
     if (own(s, 'status')) {
       assert(s.status === 'alive' || s.status === 'left');
       if (s.status === 'left') {
@@ -228,7 +231,7 @@
     return { version: 2, selected: null, adopted: false, born: now, updated: now,
       needs: [40, 75, 65, 70], xp: 0, count: 0, seconds: 0, bond: 0, points: 60,
       inventory: {}, logs: [], task: null, lastCare: {}, emotionalMilestones: [], worn: null,
-      health: 100, status: 'alive', criticalAt: null, leftAt: null,
+      health: 100, status: 'alive', criticalAt: null, leftAt: null, name: null,
       daily: { date: date(now), seconds: 0, count: 0, earned: 0 },
       checkin: { date: '', streak: 0 }, reliefDate: '', stageIndex: 0, lastTouch: null };
   }
@@ -270,7 +273,7 @@
       if (s.bond < threshold || s.emotionalMilestones.includes(threshold)) continue;
       s.emotionalMilestones.push(threshold);
       s.points = Math.min(LIMIT, s.points + 10);
-      log(s, now, `与${profiles[s.selected].name}的亲密度首次达到 ${threshold}，${threshold === 30 ? '建立信任' : '亲密依恋'}，获得 10 积分。`);
+      log(s, now, `与${petName(s)}的亲密度首次达到 ${threshold}，${threshold === 30 ? '建立信任' : '亲密依恋'}，获得 10 积分。`);
     }
   }
   function refresh(s, now) {
@@ -293,11 +296,11 @@
       if (s.health <= 0 && s.criticalAt === null) {
         s.health = 0;
         s.criticalAt = now;
-        log(s, now, `${profiles[s.selected].name}的健康度耗尽了，进入病危状态。24 小时内用回春灵药还能挽回。`);
+        log(s, now, `${petName(s)}的健康度耗尽了，进入病危状态。24 小时内用回春灵药还能挽回。`);
       }
       if (s.criticalAt !== null && s.health >= 20) {
         s.criticalAt = null;
-        log(s, now, `${profiles[s.selected].name}的状况稳定下来了，好好休养吧。`);
+        log(s, now, `${petName(s)}的状况稳定下来了，好好休养吧。`);
       }
       if (s.criticalAt !== null) {
         const sinceCritical = nightSpanMs(s.criticalAt, now);
@@ -325,7 +328,7 @@
     s.status = 'left';
     s.leftAt = now;
     s.task = null;
-    log(s, now, `${profiles[s.selected].name}${departures[s.selected]}`);
+    log(s, now, `${petName(s)}${departures[s.selected]}`);
   }
   function healthTier(s) {
     if (!s.adopted) return null;
@@ -335,17 +338,26 @@
     if (s.health < 70) return 'low';
     return 'healthy';
   }
-  function adopt(s, type, now) {
+  function petName(s) {
+    return s.name || profiles[s.selected].name;
+  }
+  function adopt(s, type, now, name) {
     clock(s, now);
     assert(own(profiles, type), '养育类型无效');
     assert(!s.adopted, '已经确认养育对象');
     if (s.selected !== type) Object.assign(s, create(now), { progress: [0, 0, 0, 0], items: [] });
+    if (name !== undefined && name !== null) {
+      assert(typeof name === 'string', '名字无效');
+      const trimmed = name.trim();
+      assert(trimmed.length <= 12, '名字需要是 12 个字符以内');
+      if (trimmed) s.name = trimmed;
+    }
     refresh(s, now);
     s.selected = type;
     s.adopted = true;
     s.inventory[type + '-milk'] = (s.inventory[type + '-milk'] || 0) + 5;
     s.inventory[type + '-clean'] = (s.inventory[type + '-clean'] || 0) + 5;
-    log(s, now, `确认陪伴${profiles[type].name}成长。`);
+    log(s, now, `确认陪伴${petName(s)}成长。`);
     rewardStages(s, now);
     rewardEmotions(s, now);
     return s;
@@ -520,7 +532,7 @@
       if (s.health >= 70) return `${profiles[s.selected].name}很健康，暂不需要药箱`;
       s.inventory[id]--;
       s.health = Math.min(100, s.health + 40);
-      log(s, now, `使用了${p.name}，${profiles[s.selected].name}的健康度恢复到 ${Math.round(s.health)}。`);
+      log(s, now, `使用了${p.name}，${petName(s)}的健康度恢复到 ${Math.round(s.health)}。`);
       return null;
     }
     if (id === 'revive-elixir') {
@@ -528,7 +540,7 @@
       s.inventory[id]--;
       s.health = Math.min(100, s.health + 60);
       s.criticalAt = null;
-      log(s, now, `使用了${p.name}，${profiles[s.selected].name}的健康度恢复到 ${Math.round(s.health)}。`);
+      log(s, now, `使用了${p.name}，${petName(s)}的健康度恢复到 ${Math.round(s.health)}。`);
       return null;
     }
     return '商品无效';
@@ -556,7 +568,7 @@
       dog: ['小狗好奇地望着你。', '小狗摇着尾巴迎接你。', '小狗开心地迎接你，然后依偎着靠在你腿边。'],
       plant: ['嫩芽朝你的方向轻轻晃了晃。', '叶片舒展开来，向你轻轻点头。', '花苞微微颤动，像在说欢迎回来。'],
       baby: stage(s).index === 3
-        ? [`${profiles.baby.name}伸出手，试着给你一个拥抱。`, `${profiles.baby.name}认出了你，张开双臂要拥抱。`, `${profiles.baby.name}主动拥抱你，紧紧依偎在你怀里。`]
+        ? [`${petName(s)}伸出手，试着给你一个拥抱。`, `${petName(s)}认出了你，张开双臂要拥抱。`, `${petName(s)}主动拥抱你，紧紧依偎在你怀里。`]
         : ['宝宝看着你，握住你的手指。', '宝宝认出了你，安心地笑了。', '宝宝紧握你的手，在你怀里安心依偎。']
     };
     return { message: responses[s.selected][s.bond >= 65 ? 2 : s.bond >= 30 ? 1 : 0], rewarded };
@@ -580,6 +592,7 @@
       validate(raw);
       const s = JSON.parse(JSON.stringify(raw));
       if (s.worn === undefined) s.worn = null;
+      if (s.name === undefined) s.name = null;
       if (s.health === undefined) s.health = 100;
       if (s.status === undefined) { s.status = 'alive'; s.criticalAt = null; s.leftAt = null; }
       return refresh(s, now);
@@ -610,5 +623,5 @@
   }
   return Object.freeze({ profiles, catalog, create, adopt, load, stage, refresh, careOptions,
     products, begin, advance, checkin, buy, wear, relief, touch, milestones,
-    remedy, restart, healthTier, configureNight, criticalRemaining });
+    remedy, restart, healthTier, configureNight, criticalRemaining, petName });
 });

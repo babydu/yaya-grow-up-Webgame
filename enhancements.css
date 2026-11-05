@@ -69,3 +69,6 @@
 .night-window{display:flex;align-items:center;gap:8px}
 .night-window select{padding:8px 10px;border:1px solid #dbe3cd;border-radius:8px;background:#f7f9f1;color:#6b7d59;font:inherit;font-size:12px}
 .night-window b{color:#8e9980;font-weight:400;font-size:12px}
+.adopt-name{display:block;width:min(280px,80%);margin:14px auto 4px;padding:11px 14px;border:1.5px solid #dbe3cd;border-radius:10px;background:#fdfef9;color:#5d6b4e;font:inherit;font-size:14px;text-align:center}
+.adopt-name:focus{outline:none;border-color:#9db07f}
+.adopt-name::placeholder{color:#a9b398}

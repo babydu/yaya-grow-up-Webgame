@@ -303,7 +303,32 @@ const assert = require('node:assert/strict');
       await nightPage.waitForTimeout(300);
       assert.match(await nightPage.locator('#critical-banner').innerText(), /约 \d+ 小时后会悄悄离开/);
       await nightPage.close();
-      console.log('通过：单对象选择、签到、自动照护、暂停、刷新恢复、后台暂停、库存、商城、情绪互动、健康生病、病危复活、离场留念、背景音乐设置、夜间节奏设置和三种视口。');
+      console.log('通过：单对象选择、签到、自动照护、暂停、刷新恢复、后台暂停、库存、商城、情绪互动、健康生病、病危复活、离场留念、背景音乐设置、夜间节奏设置、自定义名字和三种视口。');
+
+    // Custom pet name: input at adoption, persisted save, engine logs follow.
+    const namedPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    try {
+      await namedPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await namedPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
+      await namedPage.locator('[data-adopt="dog"]').click();
+      assert.match(await namedPage.locator('#adopt-name').getAttribute('placeholder'), /麦芽/);
+      await namedPage.locator('#adopt-name').fill('豆包');
+      await namedPage.locator('#adopt-confirm').click();
+      await namedPage.waitForTimeout(300);
+      assert.match(await namedPage.locator('#companion-chip').innerText(), /豆包/);
+      assert.equal(await namedPage.locator('#pet-name').innerText(), '豆包');
+      assert.equal(await namedPage.locator('#room-name').innerText(), '豆包的小窝');
+      const namedSave = await namedPage.evaluate(() => JSON.parse(localStorage.getItem('slow-growing-v2')));
+      assert.equal(namedSave.name, '豆包');
+      await namedPage.locator('aside [data-page="diary"]').click();
+      await namedPage.waitForTimeout(200);
+      assert.match(await namedPage.locator('#secondary-page').innerText(), /确认陪伴豆包成长/);
+      await namedPage.reload({ waitUntil: 'domcontentloaded' });
+      await namedPage.waitForTimeout(400);
+      assert.equal(await namedPage.locator('#pet-name').innerText(), '豆包');
+    } finally {
+      await namedPage.close().catch(() => {});
+    }
     } finally {
       await nightPage.close().catch(() => {});
     }
