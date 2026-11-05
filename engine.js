@@ -303,8 +303,7 @@
         const sinceCritical = nightSpanMs(s.criticalAt, now);
         const criticalHours = (now - s.criticalAt - sinceCritical) / HOUR + (sinceCritical / HOUR) * NIGHT_RATE;
         if (criticalHours >= 24) leave(s, now);
-      }
-    }
+      }    }
     if (s.daily.date !== date(now)) s.daily = { date: date(now), seconds: 0, count: 0, earned: 0 };
     rewardStages(s, now);
     rewardEmotions(s, now);
@@ -316,6 +315,12 @@
     dog: '趁着夜色跑向田野，出门远行了。',
     plant: '花朵枯萎，化作春泥，把这一季的陪伴留在了土里。'
   };
+  function criticalRemaining(s, now) {
+    if (!s.adopted || s.status !== 'alive' || s.criticalAt === null) return null;
+    const sinceCritical = nightSpanMs(s.criticalAt, now);
+    const used = (now - s.criticalAt - sinceCritical) / HOUR + (sinceCritical / HOUR) * NIGHT_RATE;
+    return Math.max(0, 24 - used);
+  }
   function leave(s, now) {
     s.status = 'left';
     s.leftAt = now;
@@ -605,5 +610,5 @@
   }
   return Object.freeze({ profiles, catalog, create, adopt, load, stage, refresh, careOptions,
     products, begin, advance, checkin, buy, wear, relief, touch, milestones,
-    remedy, restart, healthTier, configureNight });
+    remedy, restart, healthTier, configureNight, criticalRemaining });
 });

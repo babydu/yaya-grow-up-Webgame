@@ -124,7 +124,7 @@ function render() {
   fill.dataset.tier = tier === 'left' ? 'critical' : tier;
   if (tier === 'critical') {
     const windowed = state.criticalAt !== null;
-    const hours = windowed ? Math.max(1, Math.ceil(24 - (now() - state.criticalAt) / 3600000)) : 0;
+    const hours = windowed ? Math.max(1, Math.ceil(G.criticalRemaining(state, now()))) : 0;
     const owned = (state.inventory['revive-elixir'] || 0) > 0;
     const reason = windowed ? `健康度已经耗尽，约 ${hours} 小时后会悄悄离开。${owned ? '回春灵药就在小屋里，现在就用。' : '回春灵药也许还来得及。'}` : `健康度已经很低，再不照顾就有离开的风险。${owned ? '回春灵药就在小屋里，现在就用。' : '回春灵药可以让它立刻好起来。'}`;
     $('critical-banner').hidden = false;

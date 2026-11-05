@@ -257,7 +257,56 @@ const assert = require('node:assert/strict');
     assert.equal(plantSave.selected, 'plant');
     assert.equal(plantSave.worn, null);
     await plantPage.close();
-    console.log('通过：单对象选择、签到、自动照护、暂停、刷新恢复、后台暂停、库存、商城、情绪互动、健康生病、病危复活、离场留念、背景音乐设置和三种视口。');
+
+    // Night window settings: defaults, persistence across reload, engine integration.
+    const nightPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    try {
+      await nightPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await nightPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
+      await nightPage.locator('[data-adopt="cat"]').click();
+      await nightPage.locator('#adopt-confirm').click();
+      await nightPage.locator('aside [data-page="settings"]').click();
+      await nightPage.waitForTimeout(200);
+      assert.equal(await nightPage.locator('#night-enabled').isChecked(), true);
+      assert.equal(await nightPage.locator('#night-start').inputValue(), '22');
+      assert.equal(await nightPage.locator('#night-end').inputValue(), '6');
+      await nightPage.selectOption('#night-start', '23');
+      await nightPage.selectOption('#night-end', '7');
+      await nightPage.waitForTimeout(150);
+      assert.deepEqual(await nightPage.evaluate(() => JSON.parse(localStorage.getItem('slow-growing-night'))),
+        { enabled: true, start: 23, end: 7 });
+      await nightPage.reload({ waitUntil: 'domcontentloaded' });
+      await nightPage.locator('aside [data-page="settings"]').click();
+      await nightPage.waitForTimeout(200);
+      assert.equal(await nightPage.locator('#night-enabled').isChecked(), true);
+      assert.equal(await nightPage.locator('#night-start').inputValue(), '23');
+      assert.equal(await nightPage.locator('#night-end').inputValue(), '7');
+      const windowed = await nightPage.evaluate(() => {
+        const H = 3600000;
+        const d = new Date(); d.setHours(13, 0, 0, 0);
+        state.born = d.getTime() - 86400000;
+        state.updated = d.getTime();
+        state.needs = [0, 0, 0, 0];
+        state.health = 3;
+        state.logs = [];
+        state.lastCare = {};
+        localStorage.setItem('slow-growing-v2', JSON.stringify(state));
+        const G = window.GameEngine;
+        G.refresh(state, d.getTime() + H);
+        const remaining24 = G.criticalRemaining(state, d.getTime() + H + 24 * H);
+        localStorage.setItem('slow-growing-v2', JSON.stringify(state));
+        return { tier: G.healthTier(state), remaining24 };
+      });
+      assert.equal(windowed.tier, 'critical');
+      assert.ok(Math.abs(windowed.remaining24 - 4) < 1e-6);
+      await nightPage.locator('aside [data-page="home"]').click();
+      await nightPage.waitForTimeout(300);
+      assert.match(await nightPage.locator('#critical-banner').innerText(), /约 \d+ 小时后会悄悄离开/);
+      await nightPage.close();
+      console.log('通过：单对象选择、签到、自动照护、暂停、刷新恢复、后台暂停、库存、商城、情绪互动、健康生病、病危复活、离场留念、背景音乐设置、夜间节奏设置和三种视口。');
+    } finally {
+      await nightPage.close().catch(() => {});
+    }
   } finally {
     await Promise.race([browser.close(), new Promise(resolve => setTimeout(resolve, 3000))]);
   }

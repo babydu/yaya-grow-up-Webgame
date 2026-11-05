@@ -837,3 +837,17 @@ test('nightSpanMs stays bounded for extreme spans', () => {
   assert.ok(Number.isFinite(huge.needs[0]) && huge.needs[0] >= 0);
   G.configureNight({ enabled: false, start: 22, end: 6 });
 });
+
+test('criticalRemaining shares the night-halved countdown with the engine', () => {
+  G.configureNight({ enabled: true, start: 22, end: 6 });
+  const dying = pet();
+  dying.needs = [0, 0, 0, 0];
+  dying.health = 3;
+  G.refresh(dying, NOW + HOUR);
+  assert.equal(dying.criticalAt, NOW + HOUR);
+  assert.ok(Math.abs(G.criticalRemaining(dying, NOW + HOUR) - 24) < 1e-9);
+  assert.ok(Math.abs(G.criticalRemaining(dying, NOW + HOUR + 24 * HOUR) - 4) < 1e-9);
+  assert.equal(G.criticalRemaining(dying, NOW + HOUR + 28 * HOUR), 0);
+  assert.equal(G.criticalRemaining(pet(), NOW), null);
+  G.configureNight({ enabled: false, start: 22, end: 6 });
+});
