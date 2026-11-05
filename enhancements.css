@@ -65,3 +65,4 @@
 .quantity-stepper strong{font-size:13px;color:#5c6e4b;min-width:42px;text-align:center;font-weight:500}
 .quantity-stepper small{font-size:10px;color:#8e9980;margin-left:auto;text-align:right}
 @media(max-width:520px){.supply-grid{grid-template-columns:1fr}.quantity-stepper small{max-width:110px}}
+.gain-note{font-size:11px;color:#6d7f5c;background:#eef3e4;border-radius:9px;padding:10px 14px;margin-top:14px;line-height:1.8}

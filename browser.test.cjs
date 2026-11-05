@@ -19,6 +19,8 @@ const assert = require('node:assert/strict');
     assert.match(await page.locator('#care-mode-hint').innerText(), /自动暂停/);
     assert.equal(await page.locator('.supply-item.selected').count(), 1);
     assert.match(await page.locator('.supply-item.selected small').innerText(), /库存/);
+    assert.match(await page.locator('#care-gain').innerText(), /饱腹感 \+45/);
+    assert.match(await page.locator('#care-gain').innerText(), /精力值 \+5/);
     await page.locator('#quantity-plus').click();
     assert.equal(await page.locator('#timer').innerText(), '10:00');
     await page.locator('#quantity-minus').click();

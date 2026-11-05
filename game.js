@@ -275,6 +275,27 @@ function updateTimer() {
   $('care-toggle').disabled=!task&&['food','clean'].includes(careId)&&!G.products(state,careId).some(p=>state.inventory[p.id]>0);
   $('timer-note').textContent=running?['正在慢慢享用，留在这里陪着就好。','小窝正在一点点变干净。','它很喜欢这段只属于你们的时间。','呼吸渐渐平稳，安心正在发生。'][['food','clean','mood','energy'].indexOf(careId)]:task?'进度已保存，准备好就继续。':'给彼此一段安静的陪伴时间。';
   $('dialog-icon').classList.toggle('care-running',running);
+  setGainNote();
+}
+function setGainNote() {
+  const el=$('care-gain');
+  const idx=needIndex[careId];
+  const task=state.task;
+  const units=task?task.quantity||1:careQuantity;
+  const pid=task?task.productId:careProduct;
+  if(!pid&&['food','clean'].includes(careId)){el.hidden=true;el.textContent='';return;}
+  const p=pid?G.catalog.find(item=>item.id===pid):null;
+  const nominal=p&&pid?p.gain:[0,0,0,0].map((_,j)=>j===idx?[45,45,35,40][idx]:0);
+  const labels=G.careOptions(state).map(a=>a.need);
+  const parts=nominal.map((g,j)=>{
+    if(g<=0)return '';
+    if(task)return `${labels[j]} +${g*units}`;
+    const eff=Math.round((Math.max(0,Math.min(100,state.needs[j]+g*units)-state.needs[j]))*100)/100;
+    if(eff<=0)return '';
+    return `${labels[j]} +${Math.round(eff)}${eff<g*units-1e-9?'（受当前需求限制）':''}`;
+  }).filter(Boolean);
+  el.hidden=!parts.length;
+  el.textContent=parts.length?`本次预计恢复：${parts.join(' · ')}`:'';
 }
 function pause() {
   running=false;
