@@ -33,6 +33,12 @@ try {
 A.loadPref();
 let backgroundCare={food:false,clean:false,mood:false,energy:false};
 try{const rawBg=JSON.parse(localStorage.getItem('slow-growing-background')||'{}');['food','clean','mood','energy'].forEach(id=>{if(typeof rawBg[id]==='boolean')backgroundCare[id]=rawBg[id];});}catch{}
+let night={enabled:true,start:22,end:6};
+try{
+  const rawNight=JSON.parse(localStorage.getItem('slow-growing-night')||'null');
+  if(rawNight&&typeof rawNight.enabled==='boolean'&&Number.isInteger(rawNight.start)&&Number.isInteger(rawNight.end)&&rawNight.start>=0&&rawNight.start<=23&&rawNight.end>=0&&rawNight.end<=23)night=rawNight;
+}catch{}
+G.configureNight(night);
 // Preserve a future-dated save when the device clock moves backwards.
 const now = () => Math.max(Date.now(), state.updated);
 function toast(text) {
@@ -185,7 +191,7 @@ function renderSecondary() {
     el.innerHTML=`<div class="page-panel shop-panel"><div class="eyebrow">A WELL-STOCKED LITTLE HOME</div><div class="section-heading"><h2>生活小铺</h2><span class="points-pill">${icon('leaf')} ${state.points} 积分</span></div><p>适合${p.name}的小小补给。签到得 11–17 积分，有效照护每次 +5（每日上限 40），成长还有额外奖励。</p><div class="shop-filters">${Object.entries(categories).map(([id,name])=>`<button data-filter="${id}" class="${shopFilter===id?'active':''}" aria-pressed="${shopFilter===id}">${name}</button>`).join('')}</div><div class="shop-grid">${G.catalog.filter(item=>item.types.includes(state.selected)&&(shopFilter==='all'||item.category===shopFilter)).map(item=>{const isAcc=item.category==='accessory';const isMed=item.category==='medical';const owned=(state.inventory[item.id]||0)>0;const stageOk=st.index>=item.minStage;const usable=isMed||available.has(item.id);const media=isAcc?`<img class="acc-thumb" src="assets/acc/${item.id.slice(4)}.png" alt="${item.name}">`:`<span class="product-icon">${icon(item.icon)}</span>`;const note=isAcc?`${stageOk?'适合当前阶段':'成长后解锁'}${state.worn===item.id?' · 穿戴中':''}`:isMed?'随时可兑换，按说明使用':`${item.pack} 份 / 组 · ${usable?'适合当前阶段':item.minStage>st.index?'成长后解锁':'已度过适用阶段'}`;const remedyOk=isMed&&(item.id==='medicine-kit'?state.health<70:state.health<70||!!state.criticalAt);const remedyLabel=isMed?(item.id==='medicine-kit'?(remedyOk?'使用 · 恢复 40 健康度':'很健康，暂不需要'):(remedyOk?'使用 · 恢复 60 健康度':'状态尚可，先收好')):'';const action=isMed?(owned?`<button data-remedy="${item.id}" ${remedyOk?'':'disabled'}>${remedyLabel}</button>`:`<button data-buy="${item.id}" ${state.points<item.price?'disabled':''}>${state.points<item.price?'积分不足':`${item.price} 积分 · 兑换`}</button>`):isAcc?(owned?`<button data-wear="${item.id}" class="${state.worn===item.id?'secondary':''}">${state.worn===item.id?'脱下':'穿上'}</button>`:`<button data-buy="${item.id}" ${!stageOk||state.points<item.price?'disabled':''}>${!stageOk?'阶段限定':state.points<item.price?'积分不足':`${item.price} 积分 · 兑换`}</button>`):`<button data-buy="${item.id}" ${!usable||state.points<item.price?'disabled':''}>${!usable?'阶段限定':state.points<item.price?'积分不足':`${item.price} 积分 · 兑换`}</button>`;return `<article class="shop-item ${isAcc?'acc-item':''}">${media}<span class="stock-tag">库存 ${state.inventory[item.id]||0}</span><h3>${item.name}</h3><p>${item.description}</p><small>${note}</small>${action}</article>`;}).join('')}</div><div class="relief-box"><div><strong>总有一份温柔的支持</strong><p>适龄主食或清洁用品耗尽时，每日可领取一次基础补给，各补 2 份。</p></div><button class="secondary" id="relief-button">领取基础补给</button></div></div>`;
   } else {
     const bgCount=['food','clean','mood','energy'].filter(id=>backgroundCare[id]).length;
-    el.innerHTML=`<div class="page-panel"><div class="eyebrow">MAKE YOURSELF AT HOME</div><h2>偏好与存档</h2><label class="setting-row"><span>应用内照护提醒<small>页面打开时提醒低需求；系统后台推送尚未接入。</small></span><input type="checkbox" id="reminders" ${reminderEnabled?'checked':''}></label><label class="setting-row"><span>背景音乐<small>照护进行时播放实时合成的音景，全部由浏览器本地生成，无外部音频文件。若手机处于静音模式（iOS 侧边拨片），请先取消静音。</small></span><input type="checkbox" id="bgm-enabled" ${A.pref.enabled?'checked':''}></label><label class="setting-row"><span>音景风格<small>白噪音、雨声、海浪、八音盒轻音乐、森林晨间，照护中切换即刻生效。</small></span><select id="bgm-style">${A.stylesHtml(A.pref.style)}</select></label><label class="setting-row"><span>音乐音量<small>当前 ${Math.round(A.pref.volume*100)}%，只影响背景音景。</small></span><input type="range" id="bgm-volume" min="0" max="100" value="${Math.round(A.pref.volume*100)}" style="--fill:${Math.round(A.pref.volume*100)}%"></label><div class="setting-row"><span>后台照护<small>勾选后，对应照护在切到其他标签页、应用或锁屏时按真实时间继续；关闭照护弹窗或整个页面仍会暂停并保留进度。</small></span><div class="bg-grid">${[['food','喂养'],['clean','清洁'],['mood','陪伴'],['energy','休息']].map(([id,name])=>`<label class="bg-check"><input type="checkbox" data-bg="${id}" ${backgroundCare[id]?'checked':''}>${name}</label>`).join('')}</div></div><div class="setting-row"><span>专心陪伴模式<small>前台照护保持页面可见计时；已允许后台的操作在切后台后继续累计。</small></span><span class="stage-badge">${bgCount?`后台 ${bgCount} 项`:'仅前台'}</span></div><div class="setting-row"><span>成长时间<small>现实 1 天 = 游戏 30 天，升级同时需要有效照护经验。</small></span></div><div class="setting-row"><span>导出存档<small>进度保存在此浏览器，可导出文件备份。</small></span><button class="primary" id="export-save">导出</button></div><label class="setting-row"><span>恢复存档<small>恢复前自动下载当前进度备份；支持本版本的 JSON 存档。</small></span><input id="import-save" type="file" accept=".json,application/json"></label><p>养育节奏、饮食与情绪数值采用游戏化简化。真实宝宝的喂养方式、辅食时机与营养补充，请与儿科专业人员讨论；宠物饮食请咨询兽医。小铺商品均为虚拟物资，使用游戏积分兑换。</p></div>`;
+    el.innerHTML=`<div class="page-panel"><div class="eyebrow">MAKE YOURSELF AT HOME</div><h2>偏好与存档</h2><label class="setting-row"><span>应用内照护提醒<small>页面打开时提醒低需求；系统后台推送尚未接入。</small></span><input type="checkbox" id="reminders" ${reminderEnabled?'checked':''}></label><label class="setting-row"><span>背景音乐<small>照护进行时播放实时合成的音景，全部由浏览器本地生成，无外部音频文件。若手机处于静音模式（iOS 侧边拨片），请先取消静音。</small></span><input type="checkbox" id="bgm-enabled" ${A.pref.enabled?'checked':''}></label><label class="setting-row"><span>音景风格<small>白噪音、雨声、海浪、八音盒轻音乐、森林晨间，照护中切换即刻生效。</small></span><select id="bgm-style">${A.stylesHtml(A.pref.style)}</select></label><label class="setting-row"><span>音乐音量<small>当前 ${Math.round(A.pref.volume*100)}%，只影响背景音景。</small></span><input type="range" id="bgm-volume" min="0" max="100" value="${Math.round(A.pref.volume*100)}" style="--fill:${Math.round(A.pref.volume*100)}%"></label><div class="setting-row"><span>后台照护<small>勾选后，对应照护在切到其他标签页、应用或锁屏时按真实时间继续；关闭照护弹窗或整个页面仍会暂停并保留进度。</small></span><div class="bg-grid">${[['food','喂养'],['clean','清洁'],['mood','陪伴'],['energy','休息']].map(([id,name])=>`<label class="bg-check"><input type="checkbox" data-bg="${id}" ${backgroundCare[id]?'checked':''}>${name}</label>`).join('')}</div></div><div class="setting-row"><span>夜间节奏<small>就寝时段内需求与健康度的下降速度减半，照护与成长计时照常。默认 22 点到次日 6 点。</small></span><div class="night-window"><input type="checkbox" id="night-enabled" ${night.enabled?'checked':''}><select id="night-start" ${night.enabled?'':'disabled'}>${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===night.start?'selected':''}>${h} 点</option>`).join('')}</select><b>至</b><select id="night-end" ${night.enabled?'':'disabled'}>${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===night.end?'selected':''}>${h} 点</option>`).join('')}</select></div></div><div class="setting-row"><span>专心陪伴模式<small>前台照护保持页面可见计时；已允许后台的操作在切后台后继续累计。</small></span><span class="stage-badge">${bgCount?`后台 ${bgCount} 项`:'仅前台'}</span></div><div class="setting-row"><span>成长时间<small>现实 1 天 = 游戏 30 天，升级同时需要有效照护经验。</small></span></div><div class="setting-row"><span>导出存档<small>进度保存在此浏览器，可导出文件备份。</small></span><button class="primary" id="export-save">导出</button></div><label class="setting-row"><span>恢复存档<small>恢复前自动下载当前进度备份；支持本版本的 JSON 存档。</small></span><input id="import-save" type="file" accept=".json,application/json"></label><p>养育节奏、饮食与情绪数值采用游戏化简化。真实宝宝的喂养方式、辅食时机与营养补充，请与儿科专业人员讨论；宠物饮食请咨询兽医。小铺商品均为虚拟物资，使用游戏积分兑换。</p></div>`;
   }
 }
 function navigate(next) {
@@ -352,6 +358,10 @@ function exportSave() {
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
+function applyNight() {
+  try{G.configureNight(night);}catch{toast('夜间时段无效，已保持原设置。');return;}
+  try{localStorage.setItem('slow-growing-night',JSON.stringify(night));}catch{}
+}
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');
   if(!b)return;
@@ -435,6 +445,18 @@ document.addEventListener('change',async e=>{
     backgroundCare[e.target.dataset.bg]=e.target.checked;
     try{localStorage.setItem('slow-growing-background',JSON.stringify(backgroundCare));}catch{toast('偏好已在本次会话生效。');}
     renderSecondary();
+  }
+  if(e.target.id==='night-enabled') {
+    night.enabled=e.target.checked;
+    $('night-start').disabled=$('night-end').disabled=!night.enabled;
+    applyNight();
+    renderSecondary();
+  }
+  if(e.target.id==='night-start'||e.target.id==='night-end') {
+    night.start=+$('night-start').value;
+    night.end=+$('night-end').value;
+    applyNight();
+    if(night.start===night.end)toast('开始与结束相同，相当于没有夜间时段。');
   }
   if(e.target.id==='import-save') {
     const file=e.target.files[0];if(!file)return;

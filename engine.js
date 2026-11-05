@@ -12,6 +12,29 @@
   const LIMIT = 1e12;
   const ids = ['food', 'clean', 'mood', 'energy'];
   const legacyDurations = [300, 30, 60, 120];
+  const NIGHT_RATE = 0.5;
+  let night = { enabled: false, start: 22, end: 6 };
+  function nightSpanMs(from, to) {
+    if (!night.enabled || night.start === night.end || to <= from) return 0;
+    let total = 0;
+    const cursor = new Date(from);
+    cursor.setHours(0, 0, 0, 0);
+    while (cursor.getTime() < to) {
+      const dayStart = cursor.getTime();
+      const winStart = dayStart + night.start * HOUR;
+      const winEnd = dayStart + (night.end <= night.start ? night.end + 24 : night.end) * HOUR;
+      const overlapStart = Math.max(from, winStart);
+      const overlapEnd = Math.min(to, winEnd);
+      if (overlapEnd > overlapStart) total += overlapEnd - overlapStart;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return total;
+  }
+  function configureNight(config) {
+    assert(record(config) && typeof config.enabled === 'boolean');
+    assert(integer(config.start, 23) && integer(config.end, 23), '夜间时段无效');
+    night = { enabled: config.enabled, start: config.start, end: config.end };
+  }
   const ages = [0, 30, 180, 360];
   const experience = [0, 100, 300, 600];
   const names = ['初生期', '探索期', '成长期', '成年期'];
@@ -250,16 +273,20 @@
   }
   function refresh(s, now) {
     clock(s, now);
-    const hours = (now - s.updated) / HOUR;
+    const span = now - s.updated;
+    const restMs = nightSpanMs(s.updated, now);
+    // Night hours advance growth pressure at half speed; recovery follows real time.
+    const activeHours = (span - restMs) / HOUR + (restMs / HOUR) * NIGHT_RATE;
+    const hours = span / HOUR;
     s.updated = now;
     // Apply the destination stage's rates to the entire elapsed interval.
     if (s.selected) {
       const options = careOptions(s);
-      s.needs = s.needs.map((v, i) => Math.max(0, v - hours * options[i].gain / options[i].intervalHours));
+      s.needs = s.needs.map((v, i) => Math.max(0, v - activeHours * options[i].gain / options[i].intervalHours));
     }
     if (s.adopted && s.status === 'alive') {
       const starving = s.needs.filter(v => v < 10).length;
-      if (starving > 0) s.health = Math.max(0, s.health - Math.min(3, starving * 0.75) * hours);
+      if (starving > 0) s.health = Math.max(0, s.health - Math.min(3, starving * 0.75) * activeHours);
       else if (s.needs.every(v => v >= 30)) s.health = Math.min(100, s.health + hours);
       if (s.health <= 0 && s.criticalAt === null) {
         s.health = 0;
@@ -270,7 +297,11 @@
         s.criticalAt = null;
         log(s, now, `${profiles[s.selected].name}的状况稳定下来了，好好休养吧。`);
       }
-      if (s.criticalAt !== null && now - s.criticalAt >= 24 * HOUR) leave(s, now);
+      if (s.criticalAt !== null) {
+        const sinceCritical = nightSpanMs(s.criticalAt, now);
+        const criticalHours = (now - s.criticalAt - sinceCritical) / HOUR + (sinceCritical / HOUR) * NIGHT_RATE;
+        if (criticalHours >= 24) leave(s, now);
+      }
     }
     if (s.daily.date !== date(now)) s.daily = { date: date(now), seconds: 0, count: 0, earned: 0 };
     rewardStages(s, now);
@@ -572,5 +603,5 @@
   }
   return Object.freeze({ profiles, catalog, create, adopt, load, stage, refresh, careOptions,
     products, begin, advance, checkin, buy, wear, relief, touch, milestones,
-    remedy, restart, healthTier });
+    remedy, restart, healthTier, configureNight });
 });

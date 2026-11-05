@@ -783,3 +783,38 @@ test('validation scales task seconds by quantity and rejects mismatches', () => 
   freeUnits.task.seconds = 300;
   assert.throws(() => G.load(freeUnits, null, s.updated));
 });
+
+test('night window halves decay, drain and critical countdown', () => {
+  assert.throws(() => G.configureNight({ enabled: true, start: 24, end: 6 }));
+  assert.throws(() => G.configureNight({ enabled: true, start: 22, end: 6.5 }));
+  G.configureNight({ enabled: true, start: 22, end: 6 });
+  const s = pet();
+  const options = G.careOptions(s);
+  G.refresh(s, NOW + 12 * HOUR);
+  options.forEach((o, i) => {
+    const rate = o.gain / o.intervalHours;
+    const expected = Math.max(0, [40, 75, 65, 70][i] - rate * 11);
+    assert.ok(Math.abs(s.needs[i] - expected) < 1e-9, `need ${i}`);
+  });
+  const rested = pet();
+  rested.needs = [80, 80, 80, 80];
+  rested.health = 50;
+  G.refresh(rested, NOW + 0.5 * HOUR);
+  assert.ok(Math.abs(rested.health - 50.5) < 1e-9);
+  const dying = pet();
+  dying.needs = [0, 0, 0, 0];
+  dying.health = 3;
+  G.refresh(dying, NOW + HOUR);
+  assert.equal(dying.health, 0);
+  assert.equal(dying.criticalAt, NOW + HOUR);
+  G.refresh(dying, NOW + HOUR + 24 * HOUR);
+  assert.equal(dying.status, 'alive');
+  G.refresh(dying, NOW + HOUR + 28 * HOUR);
+  assert.equal(dying.status, 'left');
+  G.configureNight({ enabled: false, start: 22, end: 6 });
+  const plain = pet();
+  plain.needs = [80, 80, 80, 80];
+  plain.health = 50;
+  G.refresh(plain, NOW + 0.5 * HOUR);
+  assert.ok(Math.abs(plain.health - 50.5) < 1e-9);
+});
