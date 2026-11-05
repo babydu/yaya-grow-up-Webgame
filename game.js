@@ -135,6 +135,7 @@ function render() {
   $('pet-mood').textContent = tier === 'left' ? '已经离开了' : state.task ? `等你继续${state.task.name}` : uneasy ? '需要你的照顾' : state.needs[low] < 40 ? ['到了进食的时间','需要清洁一下','想要你的陪伴','需要安静休息'][low] : '安心地享受你的陪伴';
   $('pet-touch').innerHTML = icon('hand') + (state.selected === 'baby' ? '抱抱宝宝' : state.selected === 'plant' ? '碰碰叶子' : '摸摸它');
   $('bond-card').innerHTML = `<span class="bond-icon">${icon('heart')}</span><div><strong>${['开始熟悉你','已经很依赖你','你是最安心的存在'][state.bond>=65?2:state.bond>=30?1:0]}</strong><p>${emotion()}</p></div><div class="bond-score"><b>${Math.round(state.bond)}</b> / 100<small>亲密度</small></div>`;
+  renderToolbox();
   $('care-cards').innerHTML = actions.map((a,i) => {
     const task = state.task?.actionId === a.id;
     const due = now() >= a.dueAt;
@@ -148,6 +149,26 @@ function render() {
   $('total-care').innerHTML = `${state.daily.count} <small>次</small>`;
   $('total-days').innerHTML = `${Math.floor((now()-state.born)/86400000)+1} <small>天</small>`;
   if (page !== 'home') renderSecondary();
+}
+function renderToolbox() {
+  const el = $('toolbox-card');
+  if (state.status === 'left') { el.hidden = true; return; }
+  const meds = G.catalog.filter(item => item.category === 'medical');
+  const owned = meds.some(item => (state.inventory[item.id] || 0) > 0);
+  const weak = state.health < 70 || state.criticalAt !== null;
+  if (!owned && !weak) { el.hidden = true; return; }
+  el.hidden = false;
+  const rows = meds.map(item => {
+    const count = state.inventory[item.id] || 0;
+    const ok = state.health < 70 || state.criticalAt !== null;
+    const iconBox = `<span class="product-icon">${icon(item.icon)}</span>`;
+    const info = `<div class="toolbox-info"><strong>${item.name}</strong><p>${item.description}</p><small>${item.id === 'medicine-kit' ? '恢复 40 健康度' : '恢复 60 健康度 · 病危时也可使用'}</small></div>`;
+    const action = count > 0
+      ? `<button data-toolbox="${item.id}" ${ok ? '' : 'disabled'}>${ok ? (count > 1 ? `使用 · 共 ${count} 份` : '使用') : '暂不需要'}</button>`
+      : `<button data-page="supplies" data-shop-filter="medical">${item.price} 积分 · 去小铺兑换</button>`;
+    return `<div class="toolbox-item">${iconBox}${info}${action}</div>`;
+  }).join('');
+  el.innerHTML = `<div class="section-heading"><h2>健康工具箱 <span>小铺买到的医疗用品，在这里直接使用</span></h2></div><div class="toolbox-grid">${rows}</div>`;
 }
 function renderSecondary() {
   const p=profile(),st=G.stage(state),el=$('secondary-page');
@@ -301,6 +322,7 @@ document.addEventListener('click',e=>{
     G.adopt(state,selectedType,now());loadFailed=false;save();$('adopt-dialog').close();render();
     toast('欢迎回家。初见的小心翼翼，会慢慢变成亲密。');return;
   }
+  if(b.dataset.shopFilter){shopFilter=b.dataset.shopFilter;}
   if(b.dataset.page)navigate(b.dataset.page);
   if(b.dataset.care)showCare(b.dataset.care);
   if(b.dataset.filter){shopFilter=b.dataset.filter;renderSecondary();}
@@ -310,6 +332,7 @@ document.addEventListener('click',e=>{
     execute(()=>G.wear(state,b.dataset.wear,now()),wasWorn?'饰物已经收好。':'饰物已经穿好，去看看小屋吧。');
   }
   if(b.dataset.remedy)execute(()=>G.remedy(state,b.dataset.remedy,now()),'用上了，健康度正在回来，好好休息。');
+  if(b.dataset.toolbox)execute(()=>G.remedy(state,b.dataset.toolbox,now()),'用上了，健康度正在回来，好好休息。');
   if(b.id==='revive-button')execute(()=>{if(!((state.inventory['revive-elixir']||0)>0)){const err=G.buy(state,'revive-elixir',now());if(err)return err;}return G.remedy(state,'revive-elixir',now());},`${profile().name}慢慢缓了过来，接下来要好好照顾。`);
   if(b.id==='restart-button') {
     try{G.restart(state,now());save();}catch{toast('还不能开始新的陪伴。');return;}
