@@ -368,8 +368,13 @@ document.addEventListener('click',e=>{
   if(b.dataset.adopt){selectedType=b.dataset.adopt;renderAdoption();return;}
   if(b.id==='adopt-confirm') {
     if(loadFailed&&!confirm('原存档读取失败。开始新故事将写入新的存档，是否继续？'))return;
-    G.adopt(state,selectedType,now());loadFailed=false;save();$('adopt-dialog').close();render();
-    toast('欢迎回家。初见的小心翼翼，会慢慢变成亲密。');return;
+    try {
+      G.adopt(state,selectedType,now());loadFailed=false;save();$('adopt-dialog').close();render();
+      toast('欢迎回家。初见的小心翼翼，会慢慢变成亲密。');
+    } catch {
+      toast('这次操作暂时无法完成，请导出存档并刷新页面。');
+    }
+    return;
   }
   if(b.dataset.shopFilter){shopFilter=b.dataset.shopFilter;}
   if(b.dataset.supply!==undefined){careProduct=b.dataset.supply;careQuantity=1;renderSupplyPicker();updateTimer();return;}

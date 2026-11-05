@@ -818,3 +818,22 @@ test('night window halves decay, drain and critical countdown', () => {
   G.refresh(plain, NOW + 0.5 * HOUR);
   assert.ok(Math.abs(plain.health - 50.5) < 1e-9);
 });
+
+test('quantity above 12 is rejected so saves stay loadable', () => {
+  const s = pet();
+  s.inventory['cat-milk'] = 50;
+  assert.equal(G.begin(s, 'food', 'cat-milk', NOW + HOUR, 13), '物资数量无效');
+  assert.equal(G.begin(s, 'food', 'cat-milk', NOW + HOUR, 12), null);
+});
+
+test('nightSpanMs stays bounded for extreme spans', () => {
+  G.configureNight({ enabled: true, start: 22, end: 6 });
+  const huge = pet();
+  huge.born = 0;
+  huge.updated = 0;
+  huge.logs = [];
+  huge.daily = { date: '1970-01-01', seconds: 0, count: 0, earned: 0 };
+  G.refresh(huge, 8640000000000000);
+  assert.ok(Number.isFinite(huge.needs[0]) && huge.needs[0] >= 0);
+  G.configureNight({ enabled: false, start: 22, end: 6 });
+});

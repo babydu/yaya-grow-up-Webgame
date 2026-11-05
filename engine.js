@@ -16,6 +16,8 @@
   let night = { enabled: false, start: 22, end: 6 };
   function nightSpanMs(from, to) {
     if (!night.enabled || night.start === night.end || to <= from) return 0;
+    // Corrupt saves may carry a near-zero timestamp; clamp to keep the day loop bounded.
+    from = Math.max(from, to - 438000 * DAY);
     let total = 0;
     const cursor = new Date(from);
     cursor.setHours(0, 0, 0, 0);
@@ -377,7 +379,7 @@
     if (s.task) return s.task.actionId === actionId && s.task.productId === pid ? null : '请先完成当前任务';
     if (s.health < 20 && actionId === 'mood') return '太虚弱了，先照顾好身体';
     const units = quantity === undefined ? 1 : quantity;
-    if (!Number.isInteger(units) || units < 1 || units > 99) return '物资数量无效';
+    if (!Number.isInteger(units) || units < 1 || units > 12) return '物资数量无效';
     if (pid === null && units !== 1) return '这种照护无需选择数量';
     const option = careOptions(s).find(a => a.id === actionId);
     const index = ids.indexOf(actionId);
