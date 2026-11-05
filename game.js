@@ -12,6 +12,9 @@ let loadFailed = false;
 let page = 'home';
 let selectedType = 'cat';
 let careId = null;
+let careProduct = null;
+let careQuantity = 1;
+let careMaxQ = 10;
 let running = false;
 let lastTick = 0;
 let lastSaved = 0;
@@ -208,28 +211,43 @@ function showCare(id) {
     const item=G.catalog.find(p=>p.id===state.task.productId);
     $('care-products').innerHTML=`<div class="reserved-item">${icon('check')}${item?item.name+` · 已取用 ${state.task.quantity||1} 份`:'专心陪伴 · 无需物资'}<small>继续照护会沿用本次物资</small></div>`;
   } else {
-    $('care-products').innerHTML=products.length?`<label class="product-label" for="care-product">本次使用</label><select id="care-product">${id==='mood'?'<option value="">徒手互动 · 无需物资</option>':''}${products.map(p=>`<option value="${p.id}" ${(state.inventory[p.id]||0)===0?'disabled':''}>${p.name} · 库存 ${state.inventory[p.id]||0} 份</option>`).join('')}</select><div id="quantity-holder"></div><small class="care-hint">开始时按选定份数消耗；暂停和继续沿用已取用物资。</small>`:'<div class="reserved-item">安心在身边，已经足够。</div>';
-    if((id==='food'||id==='clean')&&!products.some(p=>state.inventory[p.id]>0))$('care-products').innerHTML='<div class="empty-stock">适龄物资用完了，先给小屋补充一点吧。<button class="secondary" id="care-shop">去生活小铺</button></div>';
-    refreshCareQuantity();
+    if((id==='food'||id==='clean')&&!products.some(p=>state.inventory[p.id]>0)){
+      $('care-products').innerHTML='<div class="empty-stock">适龄物资用完了，先给小屋补充一点吧。<button class="secondary" id="care-shop">去生活小铺</button></div>';
+    } else {
+      careProduct=id==='mood'?'':products.find(p=>state.inventory[p.id]>0)?.id||null;
+      careQuantity=1;
+      renderSupplyPicker();
+    }
   }
   updateTimer();
   $('care-dialog').showModal();
 }
 const needIndex={food:0,clean:1,mood:2,energy:3};
-function refreshCareQuantity() {
-  const holder=$('quantity-holder');
-  if(!holder)return;
-  const pid=$('care-product')?.value||null;
-  const p=G.catalog.find(item=>item.id===pid);
-  if(!p){holder.innerHTML='';return;}
+function renderSupplyPicker() {
+  const holder=$('care-products');
+  const products=G.products(state,careId);
+  if(!products.length){holder.innerHTML='<div class="reserved-item">安心在身边，已经足够。</div>';return;}
+  const entries=[];
+  if(careId==='mood')entries.push({id:'',name:'徒手互动',icon:'hand',free:true});
+  products.forEach(p=>entries.push({id:p.id,name:p.name,icon:p.icon,stock:state.inventory[p.id]||0}));
+  const cards=entries.map(e=>{
+    const selected=(careProduct||'')===e.id;
+    const out=!e.free&&e.stock===0;
+    return `<button type="button" class="supply-item ${selected?'selected':''}" ${out?'disabled':''} data-supply="${e.id}"><span class="product-icon">${icon(e.icon)}</span><span class="supply-info"><strong>${e.name}</strong><small>${e.free?'无需消耗物资':out?'已用完':`库存 ${e.stock} 份`}</small></span>${selected?`<span class="supply-mark">${icon('check')}</span>`:''}</button>`;
+  }).join('');
+  holder.innerHTML=`<span class="product-label">库存物资</span><div class="supply-grid">${cards}</div>${quantityBlock()}<small class="care-hint">开始时按选定份数消耗对应物资；暂停和继续沿用已取用物资。</small>`;
+}
+function quantityBlock() {
+  const p=G.catalog.find(item=>item.id===careProduct);
+  if(!p)return '';
   const stock=state.inventory[p.id]||0;
-  if(stock<2){holder.innerHTML='';return;}
   const idx=needIndex[careId];
   const perUnit=p.gain[idx]>0?p.gain[idx]:[45,45,35,40][idx];
-  const maxQ=Math.max(1,Math.min(stock,Math.ceil((100-state.needs[idx])/perUnit),10));
-  if(maxQ<2){holder.innerHTML='';return;}
-  const options=Array.from({length:maxQ},(_,i)=>`<option value="${i+1}" ${i===0?'selected':''}>${i+1} 份</option>`).join('');
-  holder.innerHTML=`<label class="product-label" for="care-quantity">使用份数</label><select id="care-quantity">${options}</select><small class="care-hint">份数越多，照护耗时和效果都按比例增加。</small>`;
+  careMaxQ=Math.max(1,Math.min(stock,Math.ceil((100-state.needs[idx])/perUnit),10));
+  if(careQuantity>careMaxQ)careQuantity=careMaxQ;
+  if(careMaxQ<2)return '';
+  const preview=G.careOptions(state).find(a=>a.id===careId).seconds*careQuantity;
+  return `<span class="product-label">使用份数</span><div class="quantity-stepper"><button type="button" id="quantity-minus" aria-label="减少份数" ${careQuantity<=1?'disabled':''}>−</button><strong id="quantity-value">${careQuantity} 份</strong><button type="button" id="quantity-plus" aria-label="增加份数" ${careQuantity>=careMaxQ?'disabled':''}>＋</button><small>预计 ${Math.floor(preview/60)} 分 ${preview%60} 秒 · 最多 ${careMaxQ} 份</small></div>`;
 }
 let bgmShown=null;
 function renderBgmNow() {
@@ -246,7 +264,7 @@ function updateTimer() {
   renderBgmNow();
   if(!careId)return;
   const task=state.task;
-  const quantity=task?task.quantity||1:+($('care-quantity')?.value)||1;
+  const quantity=task?task.quantity||1:careQuantity;
   const seconds=task?.seconds||G.careOptions(state).find(a=>a.id===careId).seconds*quantity;
   const remaining=Math.ceil(seconds-(task?.elapsed||0));
   $('timer').textContent=`${String(Math.floor(remaining/60)).padStart(2,'0')}:${String(remaining%60).padStart(2,'0')}`;
@@ -268,8 +286,8 @@ function toggleCare() {
   if(running){pause();return;}
   if(document.hidden)return;
   if(!state.task) {
-    const pid=$('care-product')?.value||null;
-    const quantity=pid?+($('care-quantity')?.value)||1:undefined;
+    const pid=careProduct||null;
+    const quantity=pid?careQuantity:undefined;
     const error=G.begin(state,careId,pid,now(),quantity);
     if(error){toast(error);return;}
     const item=G.catalog.find(p=>p.id===state.task.productId);
@@ -323,6 +341,8 @@ document.addEventListener('click',e=>{
     toast('欢迎回家。初见的小心翼翼，会慢慢变成亲密。');return;
   }
   if(b.dataset.shopFilter){shopFilter=b.dataset.shopFilter;}
+  if(b.dataset.supply!==undefined){careProduct=b.dataset.supply;careQuantity=1;renderSupplyPicker();updateTimer();return;}
+  if(b.id==='quantity-minus'||b.id==='quantity-plus'){careQuantity=Math.max(1,Math.min(careQuantity+(b.id==='quantity-plus'?1:-1),careMaxQ));renderSupplyPicker();updateTimer();return;}
   if(b.dataset.page)navigate(b.dataset.page);
   if(b.dataset.care)showCare(b.dataset.care);
   if(b.dataset.filter){shopFilter=b.dataset.filter;renderSecondary();}
@@ -369,8 +389,6 @@ document.addEventListener('input',e=>{
   }
 });
 document.addEventListener('change',async e=>{
-  if(e.target.id==='care-product')refreshCareQuantity();
-  if(e.target.id==='care-quantity')updateTimer();
   if(e.target.id==='reminders') {
     reminderEnabled=e.target.checked;
     try{localStorage.setItem('slow-growing-reminders',reminderEnabled?'on':'off');}catch{toast('偏好已在本次会话生效。');}
