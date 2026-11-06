@@ -23,6 +23,7 @@
     check: 'M5 12l4 4L20 5',
     spark: 'm12 2 3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7',
     clean: 'M8 11h8l3 10H5l3-10ZM10 11V2h4v9M9 16v5M15 16v5',
+    pack: 'M6.5 21V9a5.5 5.5 0 0 1 11 0v12M6.5 21h11M6.5 12.5h11M9.5 9V6.5a2.5 2.5 0 0 1 5 0V9M9.5 21v-3h5v3',
     bulb: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10c.7.7 1 1.3 1 2h6c0-.7.3-1.3 1-2a6 6 0 0 0-4-10Z'
   };
   const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.heart}"/></svg>`;
@@ -37,7 +38,34 @@
     plant: [104, 128, 152, 172]
   };
   // Worn accessory placement as fractions of the character box.
-  const WEAR_POS = {};
+  // x/y/w are relative to the character box; bottom:true anchors the item's
+  // lower edge to the character baseline (ground / feet).
+  const WEAR_POS = {
+    baby: {
+      'acc-baby-1': { x: .5, y: .02, w: .46 },
+      'acc-baby-2': { x: .5, y: .56, w: .46 },
+      'acc-baby-3': { x: .5, y: .96, w: .42, bottom: true },
+      'acc-baby-4': { x: 1.24, y: .72, w: .28 }
+    },
+    cat: {
+      'acc-cat-1': { x: .5, y: .30, w: .54 },
+      'acc-cat-2': { x: .5, y: .50, w: .42 },
+      'acc-cat-3': { x: 1.26, y: .76, w: .30 },
+      'acc-cat-4': { x: -.16, y: .70, w: .28 }
+    },
+    dog: {
+      'acc-dog-1': { x: .5, y: .32, w: .56 },
+      'acc-dog-2': { x: .5, y: .28, w: .46 },
+      'acc-dog-3': { x: 1.24, y: .70, w: .34 },
+      'acc-dog-4': { x: -.15, y: .76, w: .26 }
+    },
+    plant: {
+      'acc-plant-1': { x: .5, w: .76, bottom: true },
+      'acc-plant-2': { x: 1.32, y: .66, w: .40 },
+      'acc-plant-3': { x: 1.10, y: .56, w: .22 },
+      'acc-plant-4': { x: -.18, y: .64, w: .24 }
+    }
+  };
   const BASE_Y = 316;
   const CENTER_X = 312;
 
@@ -62,7 +90,7 @@
         const aw = +(iw * pos.w).toFixed(1);
         const ah = +(aw * adim[1] / adim[0]).toFixed(1);
         const ax = +(ix + iw * pos.x - aw / 2).toFixed(1);
-        const ay = +(iy + d * pos.y).toFixed(1);
+        const ay = +(pos.bottom ? iy + d - ah : iy + d * pos.y).toFixed(1);
         acc = `<image class="acc-worn" data-worn="${worn}" href="assets/acc/${worn.slice(4)}.png" x="${ax}" y="${ay}" width="${aw}" height="${ah}" preserveAspectRatio="xMidYMid meet"/>`;
       }
     }
