@@ -40,6 +40,11 @@
   // Worn accessory placement as fractions of the character box.
   // x/y/w are relative to the character box; bottom:true anchors the item's
   // lower edge to the character baseline (ground / feet).
+  // Plant stage art bakes in its own pot: when the leaf-pattern pot is worn,
+  // clip the base art above these per-stage pot-top ratios (measured from the
+  // PNGs) so the new pot truly replaces the old one instead of stacking.
+  const POT_CUT = { plant: [.203, .351, .523, .565] };
+  const POT_ACC = { plant: 'acc-plant-1' };
   const WEAR_POS = {
     baby: {
       'acc-baby-1': { x: .5, y: .02, w: .46 },
@@ -48,14 +53,14 @@
       'acc-baby-4': { x: 1.24, y: .72, w: .28 }
     },
     cat: {
-      'acc-cat-1': { x: .5, y: .30, w: .54 },
-      'acc-cat-2': { x: .5, y: .50, w: .42 },
+      'acc-cat-1': { x: .5, y: .30, w: .54, stages: { 2: { x: .309, y: .407, w: .285 }, 3: { x: .336, y: .277, w: .746 } } },
+      'acc-cat-2': { x: .59, y: .55, w: .42, stages: { 0: { x: .5, y: .39, w: .46 }, 2: { x: .2, y: .29, w: .5 }, 3: { x: .225, y: .173, w: .533 } } },
       'acc-cat-3': { x: 1.26, y: .76, w: .30 },
       'acc-cat-4': { x: -.16, y: .70, w: .28 }
     },
     dog: {
-      'acc-dog-1': { x: .5, y: .32, w: .56 },
-      'acc-dog-2': { x: .5, y: .28, w: .46 },
+      'acc-dog-1': { x: .5, y: .32, w: .56, stages: { 2: { x: .239, y: .395, w: .383 }, 3: { x: .38, y: .305, w: .476 } } },
+      'acc-dog-2': { x: .5, y: .28, w: .46, stages: { 2: { x: .129, y: .337, w: .601 }, 3: { x: .243, y: .243, w: .746 } } },
       'acc-dog-3': { x: 1.24, y: .70, w: .34 },
       'acc-dog-4': { x: -.15, y: .76, w: .26 }
     },
@@ -82,20 +87,37 @@
     const ix = +(CENTER_X - iw / 2).toFixed(1);
     const iy = +(BASE_Y - d).toFixed(1);
     const sick = tier === 'sick' || tier === 'critical' ? ' data-sick="true"' : '';
+    const potCut = worn && worn === POT_ACC[type] ? POT_CUT[type][n] : null;
     let acc = '';
     if (worn) {
       const adim = DIMS.acc[worn];
-      const pos = (WEAR_POS[type] || {})[worn] || { x: .5, y: .04, w: .5 };
+      let pos = (WEAR_POS[type] || {})[worn] || { x: .5, y: .04, w: .5 };
+      if (pos.stages && pos.stages[n]) pos = { ...pos, ...pos.stages[n] };
       if (adim) {
-        const aw = +(iw * pos.w).toFixed(1);
-        const ah = +(aw * adim[1] / adim[0]).toFixed(1);
+        let aw = iw * pos.w;
+        if (potCut) {
+          const need = d * (1 - potCut) + 5;
+          if (aw * adim[1] / adim[0] < need) aw = need * adim[0] / adim[1];
+        }
+        aw = +aw.toFixed(1);
         const ax = +(ix + iw * pos.x - aw / 2).toFixed(1);
-        const ay = +(pos.bottom ? iy + d - ah : iy + d * pos.y).toFixed(1);
-        acc = `<image class="acc-worn" data-worn="${worn}" href="assets/acc/${worn.slice(4)}.png" x="${ax}" y="${ay}" width="${aw}" height="${ah}" preserveAspectRatio="xMidYMid meet"/>`;
+        if (pos.crop) {
+          const [cx0, cy0, cx1, cy1] = pos.crop;
+          const cw = +((cx1 - cx0) * adim[0]).toFixed(1);
+          const ch = +((cy1 - cy0) * adim[1]).toFixed(1);
+          const ah = +(aw * ch / cw).toFixed(1);
+          const ay = +(pos.bottom ? iy + d - ah : iy + d * pos.y).toFixed(1);
+          acc = `<svg class="acc-worn" data-worn="${worn}" x="${ax}" y="${ay}" width="${aw}" height="${ah}" viewBox="${(cx0 * adim[0]).toFixed(1)} ${(cy0 * adim[1]).toFixed(1)} ${cw} ${ch}" preserveAspectRatio="xMidYMid meet"><image href="assets/acc/${worn.slice(4)}.png" x="0" y="0" width="${adim[0]}" height="${adim[1]}"/></svg>`;
+        } else {
+          const ah = +(aw * adim[1] / adim[0]).toFixed(1);
+          const ay = +(pos.bottom ? iy + d - ah : iy + d * pos.y).toFixed(1);
+          acc = `<image class="acc-worn" data-worn="${worn}" href="assets/acc/${worn.slice(4)}.png" x="${ax}" y="${ay}" width="${aw}" height="${ah}" preserveAspectRatio="xMidYMid meet"/>`;
+        }
       }
     }
-    return `<ellipse cx="${CENTER_X}" cy="${BASE_Y}" rx="${(iw * 0.42).toFixed(1)}" ry="9" fill="#b8a97e" opacity=".28"/>
-      <image class="pet-breathe"${sick} data-character="${type}" data-stage="${n}" href="assets/stages/${type}-${n + 1}.png" x="${ix}" y="${iy}" width="${iw}" height="${d}" preserveAspectRatio="xMidYMid meet"/>${acc}`;
+    const potClip = potCut ? `<clipPath id="pot-clip"><rect x="${ix - 2}" y="${iy - 2}" width="${iw + 4}" height="${(d * potCut + 2).toFixed(1)}"/></clipPath>` : '';
+    return `<ellipse cx="${CENTER_X}" cy="${BASE_Y}" rx="${(iw * 0.42).toFixed(1)}" ry="9" fill="#b8a97e" opacity=".28"/>${potClip}
+      <g${potCut ? ' clip-path="url(#pot-clip)"' : ''}><image class="pet-breathe"${sick} data-character="${type}" data-stage="${n}" href="assets/stages/${type}-${n + 1}.png" x="${ix}" y="${iy}" width="${iw}" height="${d}" preserveAspectRatio="xMidYMid meet"/></g>${acc}`;
   }
 
   function hearts() {
