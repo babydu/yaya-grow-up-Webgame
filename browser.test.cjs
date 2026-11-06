@@ -303,7 +303,7 @@ const assert = require('node:assert/strict');
       await nightPage.waitForTimeout(300);
       assert.match(await nightPage.locator('#critical-banner').innerText(), /约 \d+ 小时后会悄悄离开/);
       await nightPage.close();
-      console.log('通过：单对象选择、签到、自动照护、暂停、刷新恢复、后台暂停、库存、商城、情绪互动、健康生病、病危复活、离场留念、背景音乐设置、夜间节奏设置、自定义名字和三种视口。');
+      console.log('通过：单对象选择、签到、自动照护、暂停、刷新恢复、后台暂停、库存、商城、情绪互动、健康生病、病危复活、离场留念、背景音乐设置、夜间节奏设置、自定义名字、养育课堂和三种视口。');
 
     // Custom pet name: input at adoption, persisted save, engine logs follow.
     const namedPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -329,7 +329,60 @@ const assert = require('node:assert/strict');
     } finally {
       await namedPage.close().catch(() => {});
     }
+
+    // Knowledge classroom: nav entry, tabs, read tracking, care-completion tip.
+    const knPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    try {
+      await knPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await knPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
+      await knPage.locator('[data-adopt="cat"]').click();
+      await knPage.locator('#adopt-confirm').click();
+      await knPage.waitForTimeout(300);
+      await knPage.locator('aside [data-page="knowledge"]').click();
+      await knPage.waitForTimeout(200);
+      assert.match(await knPage.locator('#secondary-page').innerText(), /养育课堂/);
+      assert.match(await knPage.locator('.points-pill').innerText(), /已了解 0 \/ 12 篇/);
+      const catTabs = await knPage.locator('.knowledge-tabs button').count();
+      assert.equal(catTabs, 4);
+      const firstCard = knPage.locator('.knowledge-card').first();
+      await firstCard.click();
+      await knPage.waitForTimeout(200);
+      assert.equal(await knPage.locator('.knowledge-card.open').count(), 1);
+      assert.match(await knPage.locator('.points-pill').innerText(), /已了解 1 \/ 12 篇/);
+      await knPage.reload({ waitUntil: 'domcontentloaded' });
+      await knPage.locator('aside [data-page="knowledge"]').click();
+      await knPage.waitForTimeout(200);
+      assert.match(await knPage.locator('.points-pill').innerText(), /已了解 1 \/ 12 篇/);
+      // Complete a feed care through the real tick loop to see the tip box.
+      await knPage.locator('aside [data-page="home"]').click();
+      await knPage.waitForTimeout(300);
+      await knPage.evaluate(() => {
+        state.needs = [30, 75, 65, 70];
+        delete state.lastCare.food;
+        state.task = null;
+        localStorage.setItem('slow-growing-v2', JSON.stringify(state));
+      });
+      await knPage.locator('#care-cards [data-care="food"]').click();
+      await knPage.locator('#care-toggle').click();
+      await knPage.waitForTimeout(300);
+      await knPage.evaluate(() => {
+        state.task.elapsed = state.task.seconds - 0.5;
+        localStorage.setItem('slow-growing-v2', JSON.stringify(state));
+      });
+      await knPage.reload({ waitUntil: 'domcontentloaded' });
+      await knPage.locator('#care-cards [data-care="food"]').click();
+      await knPage.locator('#care-toggle').click();
+      await knPage.locator('#info-dialog').waitFor({ state: 'visible' });
+      assert.match(await knPage.locator('.tip-box').innerText(), /养护小知识/);
+      assert.match(await knPage.locator('#knowledge-link').innerText(), /养育课堂/);
+      await knPage.locator('#knowledge-link').click();
+      await knPage.waitForTimeout(200);
+      assert.match(await knPage.locator('#secondary-page').innerText(), /养育课堂/);
+      await knPage.close();
     } finally {
+      await knPage.close().catch(() => {});
+    }
+  } finally {
       await nightPage.close().catch(() => {});
     }
   } finally {

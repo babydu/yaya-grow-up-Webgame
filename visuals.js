@@ -22,7 +22,8 @@
     arrow: 'M4 12h16M15 7l5 5-5 5',
     check: 'M5 12l4 4L20 5',
     spark: 'm12 2 3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7',
-    clean: 'M8 11h8l3 10H5l3-10ZM10 11V2h4v9M9 16v5M15 16v5'
+    clean: 'M8 11h8l3 10H5l3-10ZM10 11V2h4v9M9 16v5M15 16v5',
+    bulb: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10c.7.7 1 1.3 1 2h6c0-.7.3-1.3 1-2a6 6 0 0 0-4-10Z'
   };
   const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.heart}"/></svg>`;
 
