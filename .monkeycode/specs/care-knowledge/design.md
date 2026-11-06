@@ -5,7 +5,7 @@ Updated: 2026-11-06
 
 ## Description
 
-新增 `knowledge.js` 静态知识模块（四角色 × 四分类，每分类 3 条共 48 条）；照护完成弹窗按「角色 + 动作分类」轮换推送知识；侧边导航新增「养育课堂」页签，按角色分页、分类分组、可展开阅读并持久化已读进度。
+新增 `knowledge.js` 静态知识模块（四角色 × 四分类，每分类 6 条共 96 条）；照护完成弹窗按「角色 + 动作分类」轮换推送知识；侧边导航新增「养育课堂」页签，仅展示当前养育角色、按分类分组、可展开阅读并持久化已读进度。
 
 ## Architecture
 
@@ -21,10 +21,10 @@ graph TD
 
 - `knowledge.js`（新文件，`window.GameKnowledge`）
   - `categories = { food: '喂养营养', clean: '清洁护理', mood: '情感陪伴', energy: '健康与观察' }`
-  - `topics = { baby: [...], cat: [...], dog: [...], plant: [...] }`，条目 `{ id, cat, title, body }`，每角色每分类 3 条，共 48 条。
+  - `topics = { baby: [...], cat: [...], dog: [...], plant: [...] }`，条目 `{ id, cat, title, body }`，每角色每分类 6 条，共 96 条。
 - `game.js`
   - 完成弹窗：`tipCursor[actionId]` 轮换取 `topics[role].filter(t => t.cat === actionId)`；池空则隐藏；新增 `#knowledge-link` 按钮（关闭弹窗并导航）。
-  - `renderKnowledge()`：角色页签 `data-krole`（默认当前角色）、分类分组、卡片展开 `data-ktoggle`（展开即标记已读）、进度胶囊。
+  - `renderKnowledge()`：仅渲染当前角色 `state.selected`、分类分组、卡片展开 `data-ktoggle`（展开即标记已读）、进度胶囊。
   - 已读存 localStorage `slow-growing-knowledge`（id 数组）。
 - `index.html`：侧边导航插入「养育课堂」按钮；底部引入 `knowledge.js`。
 - `visuals.js`：新增 bulb 图标。
