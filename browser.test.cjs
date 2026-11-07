@@ -397,6 +397,33 @@ const assert = require('node:assert/strict');
     } finally {
       await knPage.close().catch(() => {});
     }
+
+    // Backpack: starter supplies handoff to care dialog, empty-state handoff to shop.
+    const packPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    try {
+      await packPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await packPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
+      await packPage.locator('[data-adopt="cat"]').click();
+      await packPage.locator('#adopt-confirm').click();
+      await packPage.waitForTimeout(300);
+      await packPage.locator('aside [data-page="pack"]').click();
+      await packPage.waitForTimeout(200);
+      assert.match(await packPage.locator('#secondary-page').innerText(), /照护物资/);
+      assert.match(await packPage.locator('#secondary-page').innerText(), /剩余 5 份/);
+      await packPage.locator('#secondary-page [data-care="food"]').click();
+      await packPage.locator('#care-dialog').waitFor({ state: 'visible' });
+      await packPage.locator('#care-dialog .close-button').click();
+      await packPage.evaluate(() => { state.inventory = {}; localStorage.setItem('slow-growing-v2', JSON.stringify(state)); });
+      await packPage.reload({ waitUntil: 'domcontentloaded' });
+      await packPage.locator('aside [data-page="pack"]').click();
+      await packPage.waitForTimeout(200);
+      assert.match(await packPage.locator('#secondary-page').innerText(), /背包还空着/);
+      await packPage.locator('#secondary-page [data-page="supplies"]').click();
+      await packPage.waitForTimeout(200);
+      assert.match(await packPage.locator('#secondary-page').innerText(), /生活小铺/);
+    } finally {
+      await packPage.close().catch(() => {});
+    }
   } finally {
       await nightPage.close().catch(() => {});
     }

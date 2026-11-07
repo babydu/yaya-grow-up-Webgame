@@ -195,8 +195,8 @@ function renderSecondary() {
   } else if(page==='pack') {
     const careAct={food:'food',nutrition:'food',clean:'clean',comfort:'mood'};
     const total=G.catalog.filter(item=>(state.inventory[item.id]||0)>0&&item.types.includes(state.selected)).length;
-    const groups=total?[['medical','医疗照护'],['accessory','随身饰物'],['supplies','照护物资']].map(([cat,name])=>{
-      const items=G.catalog.filter(item=>item.types.includes(state.selected)&&item.category===cat&&(state.inventory[item.id]||0)>0);
+    const groups=total?[['医疗照护',['medical']],['随身饰物',['accessory']],['照护物资',['food','clean','nutrition','comfort']]].map(([name,cats])=>{
+      const items=G.catalog.filter(item=>item.types.includes(state.selected)&&cats.includes(item.category)&&(state.inventory[item.id]||0)>0);
       if(!items.length)return '';
       const rows=items.map(item=>{
         const count=state.inventory[item.id]||0;
