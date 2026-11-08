@@ -30,6 +30,11 @@
 .shop-item.acc-item{background:#fffdf9}
 .milestone .stage-thumb{width:100%;height:130px;object-fit:contain;margin-bottom:12px;background:#f7f5ef;border-radius:10px;padding:6px}
 .acc-worn{filter:drop-shadow(0 2px 3px #0002)}
+.room-art[data-day="dawn"] .room-bg{filter:saturate(1.08) brightness(1.06) sepia(.12)}
+.room-art[data-day="noon"] .room-bg{filter:saturate(1.04) brightness(1.02)}
+.room-art[data-day="afternoon"] .room-bg{filter:none}
+.room-art[data-day="dusk"] .room-bg{filter:saturate(.9) brightness(.86) hue-rotate(-18deg) sepia(.15)}
+.room-art[data-day="night"] .room-bg{filter:saturate(.45) brightness(.58) hue-rotate(16deg) contrast(1.05)}
 @media(max-width:600px){
   .adopt-options{grid-template-columns:1fr 1fr}
   .milestone .stage-thumb{height:96px}

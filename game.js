@@ -85,6 +85,21 @@ function timeUntil(at) {
 }
 function profile() { return G.profiles[state.selected || 'cat']; }
 function petName() { return state.name || profile().name; }
+function dayPart(at) {
+  const h = (at instanceof Date ? at : new Date()).getHours();
+  if (h >= 6 && h <= 10) return 'dawn';
+  if (h >= 11 && h <= 13) return 'noon';
+  if (h >= 14 && h <= 17) return 'afternoon';
+  if (h >= 18 && h <= 21) return 'dusk';
+  return 'night';
+}
+const DAY_TEXTURE = {
+  dawn: { greet: '新的一天，先看看它', weather: '清晨的微光 · 18°C', icon: 'sun', speech: '清晨见你，心里就安稳了。' },
+  noon: { greet: '午后的小屋，也要好好陪伴', weather: '阳光正好 · 24°C', icon: 'sun', speech: '午后的阳光里，有你真好。' },
+  afternoon: { greet: '阳光正好，慢慢待一会儿', weather: '温暖的午后 · 24°C', icon: 'sun', speech: '看见你，今天又变好了。' },
+  dusk: { greet: '傍晚回来了，它在等你', weather: '暮色渐沉 · 20°C', icon: 'moon', speech: '你回来了，这一天就完整了。' },
+  night: { greet: '夜深了，轻轻陪一会儿', weather: '夜里的小屋 · 16°C', icon: 'moon', speech: '夜里有你在，就能安心睡。' }
+};
 function emotion() {
   const level = state.bond >= 65 ? 2 : state.bond >= 30 ? 1 : 0;
   const text = {
@@ -137,17 +152,23 @@ function render() {
     $('critical-banner').hidden = false;
     $('critical-banner').innerHTML = `<div><strong>${escapeHtml(petName())}病危了</strong><p>${reason}</p></div><button class="primary" id="revive-button">${owned ? '使用回春灵药' : `购买并使用回春灵药（60 积分）`}</button>`;
   } else $('critical-banner').hidden = true;
-  const sceneKey = tier === 'left' ? 'left:' + state.leftAt : state.selected + ':' + st.index + ':' + (state.worn || '') + ':' + tier;
+  const part = dayPart();
+  const texture = DAY_TEXTURE[part];
+  $('greeting-title').innerHTML = texture.greet + `<span class="tiny-leaf">${icon('leaf')}</span>`;
+  $('room-weather').innerHTML = icon(texture.icon) + texture.weather;
+  const worn = state.worn && typeof state.worn === 'object' ? state.worn : { wear: null, place: null };
+  const sceneKey = tier === 'left' ? 'left:' + state.leftAt : state.selected + ':' + st.index + ':' + (worn.wear || '') + ':' + (worn.place || '') + ':' + tier;
   if ($('room-art').dataset.sceneKey !== sceneKey) {
     $('room-art').dataset.sceneKey = sceneKey;
     $('room-art').innerHTML = tier === 'left' ? memorial(p) : scene(state.selected, st.index, state.worn, tier);
   }
+  $('room-art').dataset.day = part;
   const labels = actions.map(a => a.need);
   $('needs').innerHTML = state.needs.map((value,i) => `<div class="need ${actions[i].id}"><div class="need-top">${icon(actions[i].icon)}<span>${labels[i]}</span><span class="need-value">${Math.round(value)} / 100</span></div><div class="progress" role="progressbar" aria-label="${labels[i]}" aria-valuenow="${Math.round(value)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${value}%"></span></div></div>`).join('');
   const low = state.needs.indexOf(Math.min(...state.needs));
   const uneasy = tier === 'sick' || tier === 'critical';
   $('speech').hidden = tier === 'left';
-  if (Date.now() > responseUntil) $('speech').textContent = tier === 'left' ? '' : uneasy ? ['身体软软的，没有力气玩……','有点不舒服，想要你多陪陪我……','会乖乖的，很快就会好起来。'][state.health % 3] : state.needs[low] < 40 ? ['肚子有点饿，你来啦？','想要干干净净的……','今天可以多陪陪我吗？','困了，陪我休息一会儿吧。'][low] : '看见你，今天又变好了。';
+  if (Date.now() > responseUntil) $('speech').textContent = tier === 'left' ? '' : uneasy ? ['身体软软的，没有力气玩……','有点不舒服，想要你多陪陪我……','会乖乖的，很快就会好起来。'][state.health % 3] : state.needs[low] < 40 ? ['肚子有点饿，你来啦？','想要干干净净的……','今天可以多陪陪我吗？','困了，陪我休息一会儿吧。'][low] : texture.speech;
   $('pet-mood').textContent = tier === 'left' ? '已经离开了' : state.task ? `等你继续${state.task.name}` : uneasy ? '需要你的照顾' : state.needs[low] < 40 ? ['到了进食的时间','需要清洁一下','想要你的陪伴','需要安静休息'][low] : '安心地享受你的陪伴';
   $('pet-touch').innerHTML = icon('hand') + (state.selected === 'baby' ? '抱抱宝宝' : state.selected === 'plant' ? '碰碰叶子' : '摸摸它');
   $('bond-card').innerHTML = `<span class="bond-icon">${icon('heart')}</span><div><strong>${['开始熟悉你','已经很依赖你','你是最安心的存在'][state.bond>=65?2:state.bond>=30?1:0]}</strong><p>${emotion()}</p></div><div class="bond-score"><b>${Math.round(state.bond)}</b> / 100<small>亲密度</small></div>`;
@@ -201,15 +222,17 @@ function renderSecondary() {
       const rows=items.map(item=>{
         const count=state.inventory[item.id]||0;
         const media=item.category==='accessory'?`<img class="acc-thumb" src="assets/acc/${item.id.slice(4)}.png" alt="${item.name}">`:`<span class="product-icon">${icon(item.icon)}</span>`;
-        const worn=item.category==='accessory'&&state.worn===item.id;
-        const info=`<div class="pack-info"><strong>${item.name}${worn?' <span class="worn-tag">穿戴中</span>':''}</strong><p>${item.description}</p><small>${item.category==='accessory'?(worn?'佩戴中 · 脱下后回到背包':'收在背包 · 可随时穿上'):item.category==='medical'?`剩余 ${count} 份 · ${item.id==='medicine-kit'?'恢复 40 健康度':'恢复 60 健康度'}`:`剩余 ${count} 份 · 照护时消耗`}</small></div>`;
+        const equipped=item.category==='accessory'&&G.isEquipped(state,item.id);
+        const place=item.category==='accessory'&&G.accessorySlot(item.id)==='place';
+        const tag=equipped?(place?'摆放中':'穿戴中'):'';
+        const info=`<div class="pack-info"><strong>${item.name}${tag?' <span class="worn-tag">'+tag+'</span>':''}</strong><p>${item.description}</p><small>${item.category==='accessory'?(equipped?(place?'摆放中 · 收起后回到背包':'佩戴中 · 脱下后回到背包'):(place?'收在背包 · 可随时放下':'收在背包 · 可随时穿上')):item.category==='medical'?`剩余 ${count} 份 · ${item.id==='medicine-kit'?'恢复 40 健康度':'恢复 60 健康度'}`:`剩余 ${count} 份 · 照护时消耗`}</small></div>`;
         let action='';
         if(item.category==='medical'){
           const ok=item.id==='medicine-kit'?state.health<70:(state.health<70||!!state.criticalAt);
           action=`<button data-toolbox="${item.id}" ${ok?'':'disabled'}>${ok?(count>1?`使用 · 共 ${count} 份`:'使用'):'暂不需要'}</button>`;
         } else if(item.category==='accessory'){
           const stageOk=st.index>=item.minStage;
-          action=worn?`<button data-wear="${item.id}" class="secondary">脱下 · 收回背包</button>`:`<button data-wear="${item.id}" ${stageOk?'':'disabled'}>${stageOk?'穿上':'成长后解锁'}</button>`;
+          action=equipped?`<button data-wear="${item.id}" class="secondary">${place?'收起 · 收回背包':'脱下 · 收回背包'}</button>`:`<button data-wear="${item.id}" ${stageOk?'':'disabled'}>${stageOk?(place?'放下':'穿上'):'成长后解锁'}</button>`;
         } else {
           action=`<button data-care="${careAct[item.category]}">去照护</button>`;
         }
@@ -217,11 +240,11 @@ function renderSecondary() {
       }).join('');
       return `<div class="section-heading"><h2>${name} <span class="heading-count">${items.length} 种</span></h2></div><div class="pack-grid">${rows}</div>`;
     }).join(''):'';
-    el.innerHTML=total?`<div class="page-panel"><div class="eyebrow">EVERYTHING IN ITS PLACE</div><div class="section-heading"><h2>我的背包</h2><span class="points-pill">${icon('leaf')} ${state.points} 积分</span></div><p>买回来的东西都收在这里。消耗品在照护与治疗时用掉；饰物可以反复穿戴，脱下后回到背包。</p>${groups}</div>`:`<div class="page-panel"><div class="eyebrow">EVERYTHING IN ITS PLACE</div><div class="section-heading"><h2>我的背包</h2></div><p>背包还空着。去生活小铺看看，给${escapeHtml(petName())}带点什么回来吧。</p><button class="primary" data-page="supplies">去生活小铺</button></div>`;
+    el.innerHTML=total?`<div class="page-panel"><div class="eyebrow">EVERYTHING IN ITS PLACE</div><div class="section-heading"><h2>我的背包</h2><span class="points-pill">${icon('leaf')} ${state.points} 积分</span></div><p>买回来的东西都收在这里。消耗品在照护与治疗时用掉；饰物可以反复穿戴或摆放，收起后回到背包。</p>${groups}</div>`:`<div class="page-panel"><div class="eyebrow">EVERYTHING IN ITS PLACE</div><div class="section-heading"><h2>我的背包</h2></div><p>背包还空着。去生活小铺看看，给${escapeHtml(petName())}带点什么回来吧。</p><button class="primary" data-page="supplies">去生活小铺</button></div>`;
   } else if(page==='supplies') {
     const available = new Set(['food','clean','mood'].flatMap(id=>G.products(state,id).map(p=>p.id)));
     const categories={all:'全部物资',food:'日常饮食',clean:'清洁护理',nutrition:'营养搭配',comfort:'陪伴玩具',accessory:'随身饰物',medical:'医疗照护'};
-    el.innerHTML=`<div class="page-panel shop-panel"><div class="eyebrow">A WELL-STOCKED LITTLE HOME</div><div class="section-heading"><h2>生活小铺</h2><span class="points-pill">${icon('leaf')} ${state.points} 积分</span></div><p>适合${escapeHtml(petName())}的小小补给。签到得 11–17 积分，有效照护每次 +5（每日上限 40），成长还有额外奖励。</p><div class="shop-filters">${Object.entries(categories).map(([id,name])=>`<button data-filter="${id}" class="${shopFilter===id?'active':''}" aria-pressed="${shopFilter===id}">${name}</button>`).join('')}</div><div class="shop-grid">${G.catalog.filter(item=>item.types.includes(state.selected)&&(shopFilter==='all'||item.category===shopFilter)).map(item=>{const isAcc=item.category==='accessory';const isMed=item.category==='medical';const owned=(state.inventory[item.id]||0)>0;const stageOk=st.index>=item.minStage;const usable=isMed||available.has(item.id);const media=isAcc?`<img class="acc-thumb" src="assets/acc/${item.id.slice(4)}.png" alt="${item.name}">`:`<span class="product-icon">${icon(item.icon)}</span>`;const note=isAcc?`${stageOk?'适合当前阶段':'成长后解锁'}${state.worn===item.id?' · 穿戴中':''}`:isMed?'随时可兑换，按说明使用':`${item.pack} 份 / 组 · ${usable?'适合当前阶段':item.minStage>st.index?'成长后解锁':'已度过适用阶段'}`;const action=isMed?(owned?`<button data-page="pack" class="secondary">已拥有 ${state.inventory[item.id]} 份 · 去背包使用</button>`:`<button data-buy="${item.id}" ${state.points<item.price?'disabled':''}>${state.points<item.price?'积分不足':`${item.price} 积分 · 兑换`}</button>`):isAcc?(owned?`<button data-page="pack" class="secondary">${state.worn===item.id?'穿戴中 · 去背包管理':'已拥有 · 去背包穿戴'}</button>`:`<button data-buy="${item.id}" ${!stageOk||state.points<item.price?'disabled':''}>${!stageOk?'阶段限定':state.points<item.price?'积分不足':`${item.price} 积分 · 兑换`}</button>`):`<button data-buy="${item.id}" ${!usable||state.points<item.price?'disabled':''}>${!usable?'阶段限定':state.points<item.price?'积分不足':`${item.price} 积分 · 兑换`}</button>`;return `<article class="shop-item ${isAcc?'acc-item':''}">${media}<span class="stock-tag">库存 ${state.inventory[item.id]||0}</span><h3>${item.name}</h3><p>${item.description}</p><small>${note}</small>${action}</article>`;}).join('')}</div><div class="relief-box"><div><strong>总有一份温柔的支持</strong><p>适龄主食或清洁用品耗尽时，每日可领取一次基础补给，各补 2 份。</p></div><button class="secondary" id="relief-button">领取基础补给</button></div></div>`;
+    el.innerHTML=`<div class="page-panel shop-panel"><div class="eyebrow">A WELL-STOCKED LITTLE HOME</div><div class="section-heading"><h2>生活小铺</h2><span class="points-pill">${icon('leaf')} ${state.points} 积分</span></div><p>适合${escapeHtml(petName())}的小小补给。签到得 11–17 积分，有效照护每次 +5（每日上限 40），成长还有额外奖励。</p><div class="shop-filters">${Object.entries(categories).map(([id,name])=>`<button data-filter="${id}" class="${shopFilter===id?'active':''}" aria-pressed="${shopFilter===id}">${name}</button>`).join('')}</div><div class="shop-grid">${G.catalog.filter(item=>item.types.includes(state.selected)&&(shopFilter==='all'||item.category===shopFilter)).map(item=>{const isAcc=item.category==='accessory';const isMed=item.category==='medical';const owned=(state.inventory[item.id]||0)>0;const stageOk=st.index>=item.minStage;const usable=isMed||available.has(item.id);const media=isAcc?`<img class="acc-thumb" src="assets/acc/${item.id.slice(4)}.png" alt="${item.name}">`:`<span class="product-icon">${icon(item.icon)}</span>`;const note=isAcc?`${stageOk?'适合当前阶段':'成长后解锁'}${G.isEquipped(state,item.id)?(G.accessorySlot(item.id)==='place'?' · 摆放中':' · 穿戴中'):''}`:isMed?'随时可兑换，按说明使用':`${item.pack} 份 / 组 · ${usable?'适合当前阶段':item.minStage>st.index?'成长后解锁':'已度过适用阶段'}`;const action=isMed?(owned?`<button data-page="pack" class="secondary">已拥有 ${state.inventory[item.id]} 份 · 去背包使用</button>`:`<button data-buy="${item.id}" ${state.points<item.price?'disabled':''}>${state.points<item.price?'积分不足':`${item.price} 积分 · 兑换`}</button>`):isAcc?(owned?`<button data-page="pack" class="secondary">${G.isEquipped(state,item.id)?'使用中 · 去背包管理':'已拥有 · 去背包'}</button>`:`<button data-buy="${item.id}" ${!stageOk||state.points<item.price?'disabled':''}>${!stageOk?'阶段限定':state.points<item.price?'积分不足':`${item.price} 积分 · 兑换`}</button>`):`<button data-buy="${item.id}" ${!usable||state.points<item.price?'disabled':''}>${!usable?'阶段限定':state.points<item.price?'积分不足':`${item.price} 积分 · 兑换`}</button>`;return `<article class="shop-item ${isAcc?'acc-item':''}">${media}<span class="stock-tag">库存 ${state.inventory[item.id]||0}</span><h3>${item.name}</h3><p>${item.description}</p><small>${note}</small>${action}</article>`;}).join('')}</div><div class="relief-box"><div><strong>总有一份温柔的支持</strong><p>适龄主食或清洁用品耗尽时，每日可领取一次基础补给，各补 2 份。</p></div><button class="secondary" id="relief-button">领取基础补给</button></div></div>`;
   } else if(page==='knowledge') {
     const role=state.selected;
     const list=K.topics[role]||[];
@@ -447,8 +470,10 @@ document.addEventListener('click',e=>{
   if(b.dataset.filter){shopFilter=b.dataset.filter;renderSecondary();}
   if(b.dataset.buy)execute(()=>G.buy(state,b.dataset.buy,now()),'物资已放进小屋，照护时可以使用。');
   if(b.dataset.wear) {
-    const wasWorn=state.worn===b.dataset.wear;
-    execute(()=>G.wear(state,b.dataset.wear,now()),wasWorn?'饰物已经收好。':'饰物已经穿好，去看看小屋吧。');
+    const id=b.dataset.wear;
+    const wasWorn=G.isEquipped(state,id);
+    const placing=G.accessorySlot(id)==='place';
+    execute(()=>G.wear(state,id,now()),wasWorn?'饰物已经收好。':placing?'饰物已经放下，去看看小屋吧。':'饰物已经穿好，去看看小屋吧。');
   }
   if(b.dataset.remedy)execute(()=>G.remedy(state,b.dataset.remedy,now()),'用上了，健康度正在回来，好好休息。');
   if(b.dataset.toolbox)execute(()=>G.remedy(state,b.dataset.toolbox,now()),'用上了，健康度正在回来，好好休息。');

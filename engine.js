@@ -123,6 +123,31 @@
   }
   freeze(profiles);
   freeze(catalog);
+  const ACC_SLOT = {
+    'acc-baby-1': 'wear', 'acc-baby-2': 'wear', 'acc-baby-3': 'wear', 'acc-baby-4': 'place',
+    'acc-cat-1': 'wear', 'acc-cat-2': 'wear', 'acc-cat-3': 'place', 'acc-cat-4': 'place',
+    'acc-dog-1': 'wear', 'acc-dog-2': 'wear', 'acc-dog-3': 'place', 'acc-dog-4': 'place',
+    'acc-plant-1': 'place', 'acc-plant-2': 'place', 'acc-plant-3': 'place', 'acc-plant-4': 'place'
+  };
+  freeze(ACC_SLOT);
+  function emptyWorn() { return { wear: null, place: null }; }
+  function accessorySlot(id) { return ACC_SLOT[id] || null; }
+  function normalizeWorn(s) {
+    if (s.worn === undefined || s.worn === null) { s.worn = emptyWorn(); return s.worn; }
+    if (typeof s.worn === 'string') {
+      const slot = ACC_SLOT[s.worn];
+      s.worn = { wear: slot === 'wear' ? s.worn : null, place: slot === 'place' ? s.worn : null };
+      return s.worn;
+    }
+    s.worn = { wear: s.worn.wear || null, place: s.worn.place || null };
+    return s.worn;
+  }
+  function isEquipped(s, id) {
+    const w = s.worn;
+    if (!w) return false;
+    if (typeof w === 'string') return w === id;
+    return w.wear === id || w.place === id;
+  }
   const own = (o, key) => Object.prototype.hasOwnProperty.call(o, key);
   const record = o => o !== null && typeof o === 'object' && !Array.isArray(o)
     && [Object.prototype, null].includes(Object.getPrototypeOf(o));
@@ -165,10 +190,24 @@
       assert(catalog.some(p => p.id === id && p.types.includes(s.selected)) && integer(quantity));
     }
     if (own(s, 'worn') && s.worn !== null) {
-      assert(typeof s.worn === 'string');
-      const acc = catalog.find(p => p.id === s.worn);
-      assert(acc && acc.category === 'accessory' && acc.types.includes(s.selected)
-        && (s.inventory[s.worn] || 0) > 0);
+      const assertAcc = id => {
+        if (id === null) return;
+        assert(typeof id === 'string');
+        const acc = catalog.find(p => p.id === id);
+        assert(acc && acc.category === 'accessory' && acc.types.includes(s.selected)
+          && (s.inventory[id] || 0) > 0);
+      };
+      if (typeof s.worn === 'string') {
+        assertAcc(s.worn);
+      } else {
+        assert(record(s.worn));
+        const wear = s.worn.wear === undefined || s.worn.wear === null ? null : s.worn.wear;
+        const place = s.worn.place === undefined || s.worn.place === null ? null : s.worn.place;
+        if (wear) assert(ACC_SLOT[wear] === 'wear');
+        if (place) assert(ACC_SLOT[place] === 'place');
+        assertAcc(wear);
+        assertAcc(place);
+      }
     }
     if (own(s, 'health')) assert(number(s.health, 100));
     if (own(s, 'name') && s.name !== null) {
@@ -230,7 +269,7 @@
     assert(timestamp(now), '时间无效');
     return { version: 2, selected: null, adopted: false, born: now, updated: now,
       needs: [40, 75, 65, 70], xp: 0, count: 0, seconds: 0, bond: 0, points: 60,
-      inventory: {}, logs: [], task: null, lastCare: {}, emotionalMilestones: [], worn: null,
+      inventory: {}, logs: [], task: null, lastCare: {}, emotionalMilestones: [], worn: emptyWorn(),
       health: 100, status: 'alive', criticalAt: null, leftAt: null, name: null,
       daily: { date: date(now), seconds: 0, count: 0, earned: 0 },
       checkin: { date: '', streak: 0 }, reliefDate: '', stageIndex: 0, lastTouch: null };
@@ -482,24 +521,24 @@
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
     if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
+    const slots = normalizeWorn(s);
     if (id === null) {
-      if (s.worn) {
-        const acc = catalog.find(p => p.id === s.worn);
-        log(s, now, `脱下了${acc ? acc.name : '饰物'}。`);
-      }
-      s.worn = null;
+      if (slots.wear || slots.place) log(s, now, `收起了饰物。`);
+      s.worn = emptyWorn();
       return null;
     }
     const acc = catalog.find(item => item.id === id);
     if (!acc || acc.category !== 'accessory' || !acc.types.includes(s.selected)) return '饰物不适用于当前对象';
     if (stage(s).index < acc.minStage) return '成长后才能佩戴这件饰物';
     if (!(s.inventory[id] > 0)) return '请先在生活小铺兑换这件饰物';
-    if (s.worn === id) {
-      s.worn = null;
-      log(s, now, `脱下了${acc.name}。`);
+    const slot = ACC_SLOT[id];
+    if (!slot) return '饰物不适用于当前对象';
+    if (slots[slot] === id) {
+      slots[slot] = null;
+      log(s, now, slot === 'place' ? `收起了${acc.name}。` : `脱下了${acc.name}。`);
     } else {
-      s.worn = id;
-      log(s, now, `为${profiles[s.selected].name}穿上了${acc.name}。`);
+      slots[slot] = id;
+      log(s, now, slot === 'place' ? `把${acc.name}放在小屋里。` : `为${petName(s)}穿上了${acc.name}。`);
     }
     return null;
   }
@@ -591,7 +630,7 @@
       const raw = parse(rawV2);
       validate(raw);
       const s = JSON.parse(JSON.stringify(raw));
-      if (s.worn === undefined) s.worn = null;
+      normalizeWorn(s);
       if (s.name === undefined) s.name = null;
       if (s.health === undefined) s.health = 100;
       if (s.status === undefined) { s.status = 'alive'; s.criticalAt = null; s.leftAt = null; }
@@ -623,5 +662,6 @@
   }
   return Object.freeze({ profiles, catalog, create, adopt, load, stage, refresh, careOptions,
     products, begin, advance, checkin, buy, wear, relief, touch, milestones,
-    remedy, restart, healthTier, configureNight, criticalRemaining, petName });
+    remedy, restart, healthTier, configureNight, criticalRemaining, petName,
+    accessorySlot, isEquipped });
 });

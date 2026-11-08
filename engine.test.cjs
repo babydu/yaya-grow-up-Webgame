@@ -553,34 +553,67 @@ test('accessory wear: purchase then wear, swap, take off and validation', () => 
   const young = pet('cat');
   assert.equal(G.wear(young, 'acc-cat-2', young.updated), '成长后才能佩戴这件饰物');
   assert.equal(G.wear(s, 'acc-cat-1', s.updated), null);
-  assert.equal(s.worn, 'acc-cat-1');
+  assert.deepEqual(s.worn, { wear: 'acc-cat-1', place: null });
   assert.ok(s.logs.some(l => l.text.includes('针织围巾')));
   assert.equal(G.buy(s, 'acc-cat-2', s.updated), null);
   assert.equal(G.wear(s, 'acc-cat-2', s.updated), null);
-  assert.equal(s.worn, 'acc-cat-2');
+  assert.deepEqual(s.worn, { wear: 'acc-cat-2', place: null });
   assert.equal(G.wear(s, 'acc-cat-2', s.updated), null);
-  assert.equal(s.worn, null);
+  assert.deepEqual(s.worn, { wear: null, place: null });
   const loaded = G.load(s, null, s.updated + HOUR);
-  assert.equal(loaded.worn, null);
+  assert.deepEqual(loaded.worn, { wear: null, place: null });
   s.worn = 'acc-cat-1';
   const wornLoad = G.load(s, null, s.updated + HOUR);
-  assert.equal(wornLoad.worn, 'acc-cat-1');
+  assert.deepEqual(wornLoad.worn, { wear: 'acc-cat-1', place: null });
   s.worn = 'acc-cat-3';
   assert.throws(() => G.load(s, null, s.updated + HOUR));
   s.worn = 'plant-food-1';
   assert.throws(() => G.load(s, null, s.updated + HOUR));
 });
 
-test('worn accessory defaults to null for legacy v2 saves and resets on adopt', () => {
+test('dual accessory slots: wear and place coexist, same-slot swap, string migrate', () => {
+  const s = pet('cat');
+  s.xp = 600;
+  G.refresh(s, NOW + 12 * DAY);
+  s.points = 400;
+  assert.equal(G.accessorySlot('acc-cat-1'), 'wear');
+  assert.equal(G.accessorySlot('acc-cat-3'), 'place');
+  assert.equal(G.buy(s, 'acc-cat-1', s.updated), null);
+  assert.equal(G.buy(s, 'acc-cat-2', s.updated), null);
+  assert.equal(G.buy(s, 'acc-cat-3', s.updated), null);
+  assert.equal(G.buy(s, 'acc-cat-4', s.updated), null);
+  assert.equal(G.wear(s, 'acc-cat-1', s.updated), null);
+  assert.equal(G.wear(s, 'acc-cat-3', s.updated), null);
+  assert.deepEqual(s.worn, { wear: 'acc-cat-1', place: 'acc-cat-3' });
+  assert.equal(s.inventory['acc-cat-1'], 1);
+  assert.equal(s.inventory['acc-cat-3'], 1);
+  assert.equal(G.isEquipped(s, 'acc-cat-1'), true);
+  assert.equal(G.isEquipped(s, 'acc-cat-3'), true);
+  assert.equal(G.wear(s, 'acc-cat-2', s.updated), null);
+  assert.deepEqual(s.worn, { wear: 'acc-cat-2', place: 'acc-cat-3' });
+  assert.equal(G.wear(s, 'acc-cat-4', s.updated), null);
+  assert.deepEqual(s.worn, { wear: 'acc-cat-2', place: 'acc-cat-4' });
+  assert.equal(G.wear(s, 'acc-cat-2', s.updated), null);
+  assert.deepEqual(s.worn, { wear: null, place: 'acc-cat-4' });
+  assert.equal(s.inventory['acc-cat-2'], 1);
+  assert.equal(G.wear(s, null, s.updated), null);
+  assert.deepEqual(s.worn, { wear: null, place: null });
+  const migrated = G.load(Object.assign(JSON.parse(JSON.stringify(s)), { worn: 'acc-cat-3' }), null, s.updated + HOUR);
+  assert.deepEqual(migrated.worn, { wear: null, place: 'acc-cat-3' });
+  const hat = G.load(Object.assign(JSON.parse(JSON.stringify(s)), { worn: 'acc-cat-1' }), null, s.updated + HOUR);
+  assert.deepEqual(hat.worn, { wear: 'acc-cat-1', place: null });
+});
+
+test('worn accessory defaults to empty slots for legacy v2 saves and resets on adopt', () => {
   const s = pet('dog');
   const raw = JSON.parse(JSON.stringify(s));
   delete raw.worn;
   const loaded = G.load(raw, null, NOW + HOUR);
-  assert.equal(loaded.worn, null);
+  assert.deepEqual(loaded.worn, { wear: null, place: null });
   const fresh = G.create(NOW);
-  assert.equal(fresh.worn, null);
+  assert.deepEqual(fresh.worn, { wear: null, place: null });
   const adopted = G.adopt(G.create(NOW), 'plant', NOW);
-  assert.equal(adopted.worn, null);
+  assert.deepEqual(adopted.worn, { wear: null, place: null });
   assert.ok(adopted.inventory['plant-milk'] === 5 && adopted.inventory['plant-clean'] === 5);
 });
 

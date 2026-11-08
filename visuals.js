@@ -87,31 +87,38 @@
     const ix = +(CENTER_X - iw / 2).toFixed(1);
     const iy = +(BASE_Y - d).toFixed(1);
     const sick = tier === 'sick' || tier === 'critical' ? ' data-sick="true"' : '';
-    const potCut = worn && worn === POT_ACC[type] ? POT_CUT[type][n] : null;
-    let acc = '';
-    if (worn) {
-      const adim = DIMS.acc[worn];
-      let pos = (WEAR_POS[type] || {})[worn] || { x: .5, y: .04, w: .5 };
+    const potId = POT_ACC[type];
+    const slots = worn && typeof worn === 'object' && !Array.isArray(worn)
+      ? { wear: worn.wear || null, place: worn.place || null }
+      : { wear: null, place: null };
+    const single = typeof worn === 'string' ? worn : null;
+    const hasPot = single === potId || slots.place === potId;
+    const potCut = hasPot ? POT_CUT[type][n] : null;
+    const drawAcc = (id, isPot) => {
+      const adim = DIMS.acc[id];
+      if (!adim) return '';
+      let pos = (WEAR_POS[type] || {})[id] || { x: .5, y: .04, w: .5 };
       if (pos.stages && pos.stages[n]) pos = { ...pos, ...pos.stages[n] };
-      if (adim) {
-        let aw = iw * pos.w;
-        if (potCut) aw = (d * (1 - potCut) + 6) * adim[0] / adim[1];
-        aw = +aw.toFixed(1);
-        const ax = +(ix + iw * pos.x - aw / 2).toFixed(1);
-        if (pos.crop) {
-          const [cx0, cy0, cx1, cy1] = pos.crop;
-          const cw = +((cx1 - cx0) * adim[0]).toFixed(1);
-          const ch = +((cy1 - cy0) * adim[1]).toFixed(1);
-          const ah = +(aw * ch / cw).toFixed(1);
-          const ay = +(pos.bottom ? iy + d - ah : iy + d * pos.y).toFixed(1);
-          acc = `<svg class="acc-worn" data-worn="${worn}" x="${ax}" y="${ay}" width="${aw}" height="${ah}" viewBox="${(cx0 * adim[0]).toFixed(1)} ${(cy0 * adim[1]).toFixed(1)} ${cw} ${ch}" preserveAspectRatio="xMidYMid meet"><image href="assets/acc/${worn.slice(4)}.png" x="0" y="0" width="${adim[0]}" height="${adim[1]}"/></svg>`;
-        } else {
-          const ah = +(aw * adim[1] / adim[0]).toFixed(1);
-          const ay = +(pos.bottom ? iy + d - ah : iy + d * pos.y).toFixed(1);
-          acc = `<image class="acc-worn" data-worn="${worn}" href="assets/acc/${worn.slice(4)}.png" x="${ax}" y="${ay}" width="${aw}" height="${ah}" preserveAspectRatio="xMidYMid meet"/>`;
-        }
+      let aw = iw * pos.w;
+      if (isPot) aw = (d * (1 - potCut) + 6) * adim[0] / adim[1];
+      aw = +aw.toFixed(1);
+      const ax = +(ix + iw * pos.x - aw / 2).toFixed(1);
+      if (pos.crop) {
+        const [cx0, cy0, cx1, cy1] = pos.crop;
+        const cw = +((cx1 - cx0) * adim[0]).toFixed(1);
+        const ch = +((cy1 - cy0) * adim[1]).toFixed(1);
+        const ah = +(aw * ch / cw).toFixed(1);
+        const ay = +(pos.bottom ? iy + d - ah : iy + d * pos.y).toFixed(1);
+        return `<svg class="acc-worn" data-worn="${id}" x="${ax}" y="${ay}" width="${aw}" height="${ah}" viewBox="${(cx0 * adim[0]).toFixed(1)} ${(cy0 * adim[1]).toFixed(1)} ${cw} ${ch}" preserveAspectRatio="xMidYMid meet"><image href="assets/acc/${id.slice(4)}.png" x="0" y="0" width="${adim[0]}" height="${adim[1]}"/></svg>`;
       }
-    }
+      const ah = +(aw * adim[1] / adim[0]).toFixed(1);
+      const ay = +(pos.bottom ? iy + d - ah : iy + d * pos.y).toFixed(1);
+      return `<image class="acc-worn" data-worn="${id}" href="assets/acc/${id.slice(4)}.png" x="${ax}" y="${ay}" width="${aw}" height="${ah}" preserveAspectRatio="xMidYMid meet"/>`;
+    };
+    const potAcc = hasPot ? drawAcc(potId, true) : '';
+    const placeAcc = single ? '' : (slots.place && slots.place !== potId ? drawAcc(slots.place, false) : '');
+    const wearAcc = single && single !== potId ? drawAcc(single, false)
+      : (slots.wear ? drawAcc(slots.wear, false) : '');
     let pet;
     if (potCut) {
       const cropH = +(d * potCut).toFixed(1);
@@ -121,7 +128,7 @@
       pet = `<image class="pet-breathe"${sick} data-character="${type}" data-stage="${n}" href="assets/stages/${type}-${n + 1}.png" x="${ix}" y="${iy}" width="${iw}" height="${d}" preserveAspectRatio="xMidYMid meet"/>`;
     }
     const shadow = `<ellipse cx="${CENTER_X}" cy="${BASE_Y}" rx="${(iw * 0.42).toFixed(1)}" ry="9" fill="#b8a97e" opacity=".28"/>`;
-    return potCut ? `${shadow}${acc}${pet}` : `${shadow}${pet}${acc}`;
+    return hasPot ? `${shadow}${potAcc}${pet}${placeAcc}${wearAcc}` : `${shadow}${pet}${placeAcc}${wearAcc}`;
   }
 
   function hearts() {

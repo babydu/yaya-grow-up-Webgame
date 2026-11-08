@@ -83,4 +83,14 @@ const bare = scene('plant', 2);
 assert.equal(bare.includes('data-worn'), false);
 assert.match(bare, /preserveAspectRatio="xMidYMid meet"/);
 
+const both = scene('baby', 3, { wear: 'acc-baby-1', place: 'acc-baby-4' });
+assert.match(both, /data-worn="acc-baby-1"/);
+assert.match(both, /data-worn="acc-baby-4"/);
+const objPot = scene('plant', 2, { wear: null, place: 'acc-plant-1' });
+assert.equal(objPot.includes('clip-path') || objPot.includes('clipPath'), false);
+assert.ok(objPot.indexOf('data-worn="acc-plant-1"') < objPot.indexOf('data-character="plant"'));
+const strHat = scene('cat', 3, 'acc-cat-1');
+assert.match(strHat, /data-worn="acc-cat-1"/);
+assert.ok(!strHat.includes('data-worn="acc-cat-3"'));
+
 console.log('通过：四角色场景含手绘背景与阶段立绘，饰物叠加、阶段锚点与领养肖像均指向图片资源且可区分。');
