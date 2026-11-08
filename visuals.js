@@ -40,9 +40,9 @@
   // Worn accessory placement as fractions of the character box.
   // x/y/w are relative to the character box; bottom:true anchors the item's
   // lower edge to the character baseline (ground / feet).
-  // Plant stage art bakes in its own pot: when the leaf-pattern pot is worn,
-  // clip the base art above these per-stage pot-top ratios (measured from the
-  // PNGs) so the new pot truly replaces the old one instead of stacking.
+  // Plant stage art bakes in its own pot. When the leaf-pattern pot is worn,
+  // crop the base art above these per-stage pot-rim ratios (measured from the
+  // PNGs) via a nested svg viewBox, and draw the new pot behind the foliage.
   const POT_CUT = { plant: [.203, .351, .523, .565] };
   const POT_ACC = { plant: 'acc-plant-1' };
   const WEAR_POS = {
@@ -95,10 +95,7 @@
       if (pos.stages && pos.stages[n]) pos = { ...pos, ...pos.stages[n] };
       if (adim) {
         let aw = iw * pos.w;
-        if (potCut) {
-          const need = d * (1 - potCut) + 5;
-          if (aw * adim[1] / adim[0] < need) aw = need * adim[0] / adim[1];
-        }
+        if (potCut) aw = (d * (1 - potCut) + 6) * adim[0] / adim[1];
         aw = +aw.toFixed(1);
         const ax = +(ix + iw * pos.x - aw / 2).toFixed(1);
         if (pos.crop) {
@@ -115,9 +112,16 @@
         }
       }
     }
-    const potClip = potCut ? `<clipPath id="pot-clip"><rect x="${ix - 2}" y="${iy - 2}" width="${iw + 4}" height="${(d * potCut + 2).toFixed(1)}"/></clipPath>` : '';
-    return `<ellipse cx="${CENTER_X}" cy="${BASE_Y}" rx="${(iw * 0.42).toFixed(1)}" ry="9" fill="#b8a97e" opacity=".28"/>${potClip}
-      <g${potCut ? ' clip-path="url(#pot-clip)"' : ''}><image class="pet-breathe"${sick} data-character="${type}" data-stage="${n}" href="assets/stages/${type}-${n + 1}.png" x="${ix}" y="${iy}" width="${iw}" height="${d}" preserveAspectRatio="xMidYMid meet"/></g>${acc}`;
+    let pet;
+    if (potCut) {
+      const cropH = +(d * potCut).toFixed(1);
+      const vbH = +(dim[1] * potCut).toFixed(1);
+      pet = `<svg class="pet-breathe"${sick} data-character="${type}" data-stage="${n}" x="${ix}" y="${iy}" width="${iw}" height="${cropH}" viewBox="0 0 ${dim[0]} ${vbH}" preserveAspectRatio="xMidYMin meet" overflow="hidden"><image href="assets/stages/${type}-${n + 1}.png" width="${dim[0]}" height="${dim[1]}"/></svg>`;
+    } else {
+      pet = `<image class="pet-breathe"${sick} data-character="${type}" data-stage="${n}" href="assets/stages/${type}-${n + 1}.png" x="${ix}" y="${iy}" width="${iw}" height="${d}" preserveAspectRatio="xMidYMid meet"/>`;
+    }
+    const shadow = `<ellipse cx="${CENTER_X}" cy="${BASE_Y}" rx="${(iw * 0.42).toFixed(1)}" ry="9" fill="#b8a97e" opacity=".28"/>`;
+    return potCut ? `${shadow}${acc}${pet}` : `${shadow}${pet}${acc}`;
   }
 
   function hearts() {

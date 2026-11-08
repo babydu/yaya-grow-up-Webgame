@@ -60,4 +60,27 @@ const worn = scene('cat', 3, 'acc-cat-1');
 const charIdx = worn.indexOf('data-character');
 const accIdx = worn.indexOf('data-worn');
 assert.ok(accIdx > charIdx);
+
+// Leaf-pattern pot: crop the baked pot via nested viewBox and draw behind foliage.
+for (let i = 0; i < 4; i++) {
+  const svg = scene('plant', i, 'acc-plant-1');
+  assert.equal(svg.includes('clip-path') || svg.includes('clipPath'), false);
+  assert.match(svg, /overflow="hidden"/);
+  const accI = svg.indexOf('data-worn="acc-plant-1"');
+  const petI = svg.indexOf('data-character="plant"');
+  assert.ok(accI >= 0 && petI > accI);
+  const d = HEIGHTS.plant[i];
+  const dim = DIMS.plant[i];
+  const cropH = +(d * [0.203, 0.351, 0.523, 0.565][i]).toFixed(1);
+  const vbH = +(dim[1] * [0.203, 0.351, 0.523, 0.565][i]).toFixed(1);
+  assert.match(svg, new RegExp(`height="${String(cropH).replace('.', '\\.')}"`));
+  assert.match(svg, new RegExp(`viewBox="0 0 ${dim[0]} ${String(vbH).replace('.', '\\.')}"`));
+  assert.ok(cropH < d);
+}
+const side = scene('plant', 3, 'acc-plant-4');
+assert.ok(side.indexOf('data-worn') > side.indexOf('data-character'));
+const bare = scene('plant', 2);
+assert.equal(bare.includes('data-worn'), false);
+assert.match(bare, /preserveAspectRatio="xMidYMid meet"/);
+
 console.log('通过：四角色场景含手绘背景与阶段立绘，饰物叠加、阶段锚点与领养肖像均指向图片资源且可区分。');

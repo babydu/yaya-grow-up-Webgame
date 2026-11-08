@@ -272,6 +272,17 @@ const assert = require('node:assert/strict');
     const plantSave = await plantPage.evaluate(() => JSON.parse(localStorage.getItem('slow-growing-v2')));
     assert.equal(plantSave.selected, 'plant');
     assert.equal(plantSave.worn, null);
+    await plantPage.evaluate(() => {
+      state.inventory['acc-plant-1'] = 1;
+      state.worn = 'acc-plant-1';
+      localStorage.setItem('slow-growing-v2', JSON.stringify(state));
+    });
+    await plantPage.reload({ waitUntil: 'domcontentloaded' });
+    assert.equal(await plantPage.locator('#room-art [data-worn="acc-plant-1"]').count(), 1);
+    const potHtml = await plantPage.locator('#room-art').innerHTML();
+    assert.ok(potHtml.indexOf('data-worn="acc-plant-1"') < potHtml.indexOf('data-character="plant"'));
+    assert.match(potHtml, /overflow="hidden"/);
+    assert.equal(potHtml.includes('clip-path'), false);
     await plantPage.close();
 
     // Night window settings: defaults, persistence across reload, engine integration.
