@@ -1112,3 +1112,14 @@ test('short moments: plant stays quiet, companions get 10s prompts', () => {
   assert.equal(loaded.momentDueAt, NOW + HOUR + 10 * 60 * 1000);
   assert.equal(loaded.momentLastId, null);
 });
+
+test('short moments: resolve refreshes stale save before writing the log', () => {
+  const s = pet();
+  s.momentDueAt = NOW;
+  const m = G.startMoment(s, NOW, 0);
+  G.resolveMoment(s, NOW + 5000, 'hit', 0);
+  assert.ok(!s.moments);
+  assert.equal(s.momentLastId, m.id);
+  assert.equal(s.updated, NOW + 5000);
+  assert.match(s.logs.at(-1).text, /亲密度 \+2/);
+});
