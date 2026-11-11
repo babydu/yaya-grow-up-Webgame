@@ -25,7 +25,7 @@ graph TD
 
 1. `profiles` 扩为 4 项并改名：baby 阿团 / cat 橘汐 / dog 麦芽 / plant 团子（kind: 宝宝/小猫/小狗/小植物）。
 2. 新增 `STAGE_LABELS`（按类型 4 阶段名），`stageName(type,index)` 改查该表；`milestones()` 沿用其输出。目录商品命名保留通用阶段词（初生/探索/成长/成年），降低改动面。
-3. 新增 `CARE_META`：按类型返回 4 动作名与 4 需求标签。plant：浇水/擦叶除虫/晒太阳/安静生长 + 水分/洁净/阳光/养分；baby/cat/dog 沿用现文案。`careOptions(s)` 每项追加 `need` 字段（需求标签）。
+3. 新增 `CARE_META`：按类型返回 4 动作名与 4 需求标签。plant：浇水/擦叶除虫/晒太阳/施肥 + 水分/洁净/阳光/养分；baby/cat/dog 沿用现文案。`careOptions(s)` 每项追加 `need` 字段（需求标签）。施肥语义见 plant-fertilize-nutrients。
 4. `profiles.plant` 触摸回应与 `emotion()`（game.js）补 plant 文案；所有硬编码角色名（如 baby 回应里的「小满」）改为引用 `profiles` 名称。
 5. 目录追加 16 件饰物：`acc-{type}-{1..4}`，category `accessory`，pack 1，price 30/45/60/80，minStage 1/2/2/3，icon 复用 spark/heart；name/description 取自设计包饰物清单。
 6. 状态新增 `worn`（string|null，默认 null）：`create()` 初始化；`validate()` 校验 `worn === null || (饰物存在 && types.includes(selected) && inventory[worn] > 0)`。

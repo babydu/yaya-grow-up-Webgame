@@ -207,7 +207,8 @@ test('purchase validates points, species, stage, id and quantity; catalog covers
     for (let index = 0; index < 4; index++) {
       a.xp = [0, 100, 300, 600][index];
       G.refresh(a, NOW + [0, 1, 6, 12][index] * DAY);
-      assert.ok(G.products(a, 'food').some(p => p.category === 'food'));
+      const feed = type === 'plant' ? 'energy' : 'food';
+      assert.ok(G.products(a, feed).some(p => p.category === 'food'));
       assert.ok(G.products(a, 'clean').length);
       assert.equal(G.careOptions(a).length, 4);
     }
@@ -234,7 +235,7 @@ test('offline decay is elapsed-based, bounded, idempotent and never advances tas
   const s = pet();
   G.begin(s, 'clean', 'cat-clean', NOW);
   G.refresh(s, NOW + 2 * HOUR);
-  assert.deepEqual(s.needs, [10, 60, 0, 50]);
+  assert.deepEqual(s.needs, [10, 57, 45, 50]);
   assert.equal(s.task.elapsed, 0);
   const saved = structuredClone(s);
   G.refresh(s, s.updated);
@@ -374,19 +375,20 @@ test('nutrition is a complete meal: one stock deduction, capped gains and relief
     G.refresh(s, NOW + 6 * DAY);
     s.inventory = { [type + '-clean']: 1 };
     const id = type + '-nutrition';
-    const meal = G.products(s, 'food').find(p => p.id === id);
+    const feed = type === 'plant' ? 'energy' : 'food';
+    const meal = G.products(s, feed).find(p => p.id === id);
     assert.match(meal.description, /完整/);
     assert.equal(G.buy(s, id, s.updated), null);
     assert.equal(typeof G.relief(s, s.updated), 'string');
     assert.equal(s.reliefDate, '');
-    s.needs = [70, 50, 50, 95];
-    assert.equal(G.begin(s, 'food', id, s.updated), null);
-    assert.equal(G.begin(s, 'food', id, s.updated), null);
+    s.needs = type === 'plant' ? [70, 50, 50, 40] : [70, 50, 50, 95];
+    assert.equal(G.begin(s, feed, id, s.updated), null);
+    assert.equal(G.begin(s, feed, id, s.updated), null);
     assert.equal(s.inventory[id], meal.pack - 1);
     assert.equal(Object.hasOwn(s.task, 'stapleId'), false);
     const restored = G.load(s, null, s.updated);
     G.advance(restored, restored.task.seconds, restored.updated);
-    assert.deepEqual(restored.needs, [100, 50, 50, 100]);
+    assert.deepEqual(restored.needs, type === 'plant' ? [85, 50, 50, 90] : [100, 50, 50, 100]);
   }
 });
 
@@ -424,7 +426,7 @@ test('species-specific final stage names propagate to next, diary, products and 
     assert.equal(G.stage(s).name, name);
     assert.equal(G.milestones(s)[3].title, name);
     assert.ok(s.logs.some(l => l.text.includes(`进入${name}`)));
-    const staple = G.products(s, 'food').find(p => p.category === 'food');
+    const staple = G.products(s, type === 'plant' ? 'energy' : 'food').find(p => p.category === 'food');
     const stapleWord = { baby: '幼儿期', cat: '成年期', dog: '成年期', plant: '盛放期' }[type];
     assert.ok((staple.name + staple.description).includes(stapleWord));
   }
@@ -491,9 +493,12 @@ test('emotional field compatibility, catch-up rewards and corruption validation'
     s.emotionalMilestones = value;
     assert.throws(() => G.load(s, null, NOW));
   }
-  const invalid = pet();
-  invalid.emotionalMilestones = [30];
-  assert.throws(() => G.load(invalid, null, NOW));
+  const faded = pet();
+  faded.bond = 20;
+  faded.emotionalMilestones = [30];
+  const loadedFaded = G.load(faded, null, NOW);
+  assert.deepEqual(loadedFaded.emotionalMilestones, [30]);
+  assert.equal(loadedFaded.bond, 20);
 });
 
 test('design pack: four profiles with bible names, kinds and per-type stage labels', () => {
@@ -517,16 +522,27 @@ test('design pack: four profiles with bible names, kinds and per-type stage labe
   }
 });
 
-test('plant care semantics: water, leaf care, sunshine and growth labels', () => {
+test('plant care semantics: watering is free, fertilize consumes fertilizer', () => {
   const s = pet('plant');
   const options = G.careOptions(s);
-  assert.deepEqual(options.map(a => a.name), ['浇水', '擦叶除虫', '晒太阳', '安静生长']);
+  assert.deepEqual(options.map(a => a.name), ['浇水', '擦叶除虫', '晒太阳', '施肥']);
   assert.deepEqual(options.map(a => a.need), ['水分', '洁净度', '阳光', '养分']);
-  assert.ok(G.products(s, 'food').some(p => p.id === 'plant-milk'));
+  assert.equal(G.products(s, 'food').length, 0);
+  assert.ok(G.products(s, 'energy').some(p => p.id === 'plant-milk'));
   assert.ok(G.products(s, 'clean').some(p => p.id === 'plant-clean'));
+  assert.deepEqual([...G.catalog.find(p => p.id === 'plant-milk').gain], [0, 0, 0, 45]);
+  s.needs = [40, 50, 50, 40];
+  assert.equal(typeof G.begin(s, 'food', 'plant-milk', s.updated), 'string');
+  assert.equal(G.begin(s, 'food', null, s.updated), null);
+  G.advance(s, s.task.seconds, s.updated);
+  assert.equal(s.needs[0], 85);
+  assert.equal(s.needs[3], 40);
+  assert.equal(G.begin(s, 'energy', null, s.updated), '请选择消耗品');
+  assert.equal(G.begin(s, 'energy', 'plant-milk', s.updated, 3), '一次施肥最多两份，薄肥勤施就好');
   assert.equal(G.buy(s, 'plant-milk', s.updated), null);
-  const result = complete(s, 'food', 'plant-milk');
+  const result = complete(s, 'energy', 'plant-milk');
   assert.equal(result.title, '照护完成');
+  assert.equal(s.needs[3], 85);
 });
 
 test('accessory catalog: 16 items, per-type, prices and stage gating', () => {
@@ -708,6 +724,57 @@ test('critical window, elixir revival and re-entry', () => {
   assert.equal(s.criticalAt, s.updated);
 });
 
+test('neglect drains bond, elixir restores health only, milestones stay earned', () => {
+  const fading = pet();
+  fading.bond = 50;
+  fading.needs = [0, 100, 100, 100];
+  G.refresh(fading, fading.updated + 2 * HOUR);
+  assert.equal(fading.health, 98.5);
+  assert.equal(fading.bond, 49.3);
+  const s = pet();
+  s.bond = 80;
+  s.emotionalMilestones = [30, 65];
+  s.needs = [0, 0, 0, 0];
+  G.refresh(s, s.updated + 40 * HOUR);
+  assert.equal(s.health, 0);
+  assert.equal(s.bond, 36);
+  assert.match(s.logs.at(-1).text, /亲密度也受到了伤害/);
+  const before = s.bond;
+  s.points += 60;
+  assert.equal(G.buy(s, 'revive-elixir', s.updated), null);
+  assert.equal(G.remedy(s, 'revive-elixir', s.updated), null);
+  assert.equal(s.health, 60);
+  assert.equal(s.criticalAt, null);
+  assert.equal(s.bond, before);
+  assert.match(s.logs.at(-1).text, /心里的距离/);
+  assert.deepEqual(s.emotionalMilestones, [30, 65]);
+  const points = s.points;
+  G.touch(s, s.updated);
+  assert.equal(s.bond, 37);
+  assert.equal(s.points, points);
+  const loaded = G.load(JSON.stringify(s), null, s.updated);
+  assert.deepEqual(loaded.emotionalMilestones, [30, 65]);
+  assert.equal(loaded.bond, 37);
+});
+
+test('bond slowly fades with time even when healthy', () => {
+  const s = pet();
+  s.bond = 50;
+  for (let i = 0; i < 10; i++) {
+    s.needs = [80, 80, 80, 80];
+    G.refresh(s, s.updated + HOUR);
+  }
+  assert.equal(s.health, 100);
+  assert.ok(Math.abs(s.bond - 49) < 1e-6);
+  const again = G.refresh(structuredClone(s), s.updated);
+  assert.equal(again.bond, s.bond);
+  const empty = pet();
+  empty.bond = 0;
+  empty.needs = [80, 80, 80, 80];
+  G.refresh(empty, empty.updated + DAY);
+  assert.equal(empty.bond, 0);
+});
+
 test('natural recovery above 20 clears the critical window', () => {
   const s = pet();
   s.health = 19.5;
@@ -790,7 +857,7 @@ test('care quantities scale stock cost, duration and gains', () => {
   assert.equal(single.task.quantity, 1);
   assert.equal(single.task.seconds, 300);
   const short = pet();
-  assert.equal(typeof G.begin(short, 'food', 'cat-milk', NOW, 6), 'string');
+  assert.equal(G.begin(short, 'food', 'cat-milk', NOW, 3), '一餐最多两份，一次喂完就好');
   assert.equal(short.task, null);
   assert.equal(short.inventory['cat-milk'], 5);
 });
@@ -798,10 +865,10 @@ test('care quantities scale stock cost, duration and gains', () => {
 test('validation scales task seconds by quantity and rejects mismatches', () => {
   const s = pet();
   s.needs[0] = 20;
-  G.begin(s, 'food', 'cat-milk', NOW, 3);
-  assert.equal(s.task.seconds, 900);
+  G.begin(s, 'food', 'cat-milk', NOW, 2);
+  assert.equal(s.task.seconds, 600);
   const loaded = G.load(JSON.stringify(s), null, s.updated);
-  assert.equal(loaded.task.seconds, 900);
+  assert.equal(loaded.task.seconds, 600);
   const overLimit = JSON.parse(JSON.stringify(s));
   overLimit.task.quantity = 13;
   assert.throws(() => G.load(overLimit, null, s.updated));
@@ -855,8 +922,55 @@ test('night window halves decay, drain and critical countdown', () => {
 test('quantity above 12 is rejected so saves stay loadable', () => {
   const s = pet();
   s.inventory['cat-milk'] = 50;
-  assert.equal(G.begin(s, 'food', 'cat-milk', NOW + HOUR, 13), '物资数量无效');
-  assert.equal(G.begin(s, 'food', 'cat-milk', NOW + HOUR, 12), null);
+  assert.equal(G.begin(s, 'food', 'cat-milk', NOW + HOUR, 13), '一餐最多两份，一次喂完就好');
+  assert.equal(G.begin(s, 'food', 'cat-milk', NOW + HOUR, 2), null);
+});
+
+test('clean uses one unit and quality tiers change cleanliness', () => {
+  for (const type of Object.keys(G.profiles)) {
+    const basic = G.catalog.find(p => p.id === type + '-clean-basic');
+    const comfort = G.catalog.find(p => p.id === type + '-clean');
+    const plus = G.catalog.find(p => p.id === type + '-clean-plus');
+    assert.equal(basic.gain[1], 35);
+    assert.equal(basic.price, 8);
+    assert.equal(comfort.gain[1], 45);
+    assert.equal(comfort.price, 10);
+    assert.equal(plus.gain[1], 55);
+    assert.equal(plus.price, 16);
+    assert.match(plus.description, /专业人士/);
+  }
+  for (let i = 1; i < 4; i++) {
+    const plus = G.catalog.find(p => p.id === 'plant-food-' + i + '-plus');
+    const base = G.catalog.find(p => p.id === 'plant-food-' + i);
+    assert.equal(plus.gain[3], 55);
+    assert.equal(plus.price, base.price + 6);
+  }
+  assert.equal(G.careQuantityCap('clean', 'baby-clean'), 1);
+  assert.equal(G.careQuantityCap('food', 'cat-milk'), 2);
+  assert.equal(G.careQuantityCap('food', 'cat-nutrition'), 1);
+  assert.equal(G.careQuantityCap('energy', 'plant-milk'), 2);
+  assert.equal(G.careQuantityCap('energy', 'plant-nutrition'), 1);
+  const s = pet('baby');
+  s.needs[1] = 20;
+  assert.equal(G.begin(s, 'clean', 'baby-clean', NOW, 2), '这次照料一次只用一份');
+  assert.equal(s.inventory['baby-clean'], 5);
+  assert.equal(G.begin(s, 'clean', 'baby-clean', NOW), null);
+  assert.equal(s.task.quantity, 1);
+  assert.equal(s.task.seconds, 30);
+  G.advance(s, 30, s.updated);
+  assert.equal(s.needs[1], 65);
+  const plus = pet('baby');
+  plus.needs[1] = 20;
+  plus.inventory['baby-clean-plus'] = 1;
+  assert.equal(G.begin(plus, 'clean', 'baby-clean-plus', NOW), null);
+  G.advance(plus, 30, plus.updated);
+  assert.equal(plus.needs[1], 75);
+  const meal = pet();
+  meal.xp = 300;
+  G.refresh(meal, NOW + 6 * DAY);
+  meal.points = 100;
+  assert.equal(G.buy(meal, 'cat-nutrition', meal.updated), null);
+  assert.equal(G.begin(meal, 'food', 'cat-nutrition', meal.updated, 2), '这次照料一次只用一份');
 });
 
 test('nightSpanMs stays bounded for extreme spans', () => {
@@ -916,4 +1030,85 @@ test('empty name input falls back to the default name', () => {
   G.adopt(s, 'cat', NOW, '   ');
   assert.equal(s.name, null);
   assert.equal(G.petName(s), '橘汐');
+});
+
+test('care pace scales intervals and decay, default stays normal', () => {
+  try {
+    assert.throws(() => G.configurePace('busy'));
+    const s = pet();
+    const normal = G.careOptions(s).map(a => a.intervalHours);
+    assert.deepEqual(normal, [3, 5, 3.5, 4]);
+    G.configurePace('relaxed');
+    const relaxed = G.careOptions(s);
+    assert.deepEqual(relaxed.map(a => a.intervalHours), [4.5, 7.5, 5.25, 6]);
+    s.needs = [100, 100, 100, 100];
+    G.refresh(s, s.updated + HOUR);
+    assert.deepEqual(s.needs, relaxed.map(o => 100 - o.gain / o.intervalHours));
+    G.configurePace('tight');
+    const tight = pet();
+    assert.deepEqual(G.careOptions(tight).map(a => a.intervalHours), [2.25, 3.75, 2.625, 3]);
+    assert.equal(G.careOptions(tight)[0].seconds, 300);
+  } finally {
+    G.configurePace('normal');
+  }
+  assert.deepEqual(G.careOptions(pet()).map(a => a.intervalHours), [3, 5, 3.5, 4]);
+});
+
+test('short moments: plant stays quiet, companions get 10s prompts', () => {
+  assert.equal(G.moments('plant').length, 0);
+  assert.ok(G.profiles.plant.rhythm.includes('安静'));
+  for (const type of ['cat', 'dog', 'baby']) {
+    const pool = G.moments(type);
+    assert.equal(pool.length, 3);
+    assert.ok(pool.some(m => m.id.endsWith('hiccup')));
+    assert.ok(pool.some(m => m.id.endsWith('ball')));
+    assert.ok(pool.some(m => m.id.endsWith('dream')));
+    assert.match(G.profiles[type].rhythm, /10 秒/);
+  }
+  const plant = pet('plant');
+  assert.equal(plant.momentDueAt, null);
+  assert.equal(G.startMoment(plant, NOW, 0), null);
+  const s = pet();
+  assert.equal(s.momentDueAt, NOW + 10 * 60 * 1000);
+  assert.equal(G.startMoment(s, NOW, 0), null);
+  const due = s.momentDueAt;
+  const first = G.startMoment(s, due, 0);
+  assert.equal(first.id, 'cat-hiccup');
+  assert.match(first.prompt, /橘汐/);
+  assert.equal(first.until, due + 10000);
+  assert.equal(s.momentDueAt, due + 10 * 60 * 1000);
+  const second = G.startMoment(s, s.momentDueAt, 0);
+  assert.equal(second.id, 'cat-ball');
+  s.bond = 10;
+  G.resolveMoment(s, s.updated, 'hit', 0);
+  assert.equal(s.bond, 12);
+  assert.match(s.logs.at(-1).text, /亲密度 \+2/);
+  const later = s.updated + 5000;
+  G.resolveMoment(s, later, 'defer', 0);
+  assert.equal(s.updated, later);
+  s.bond = 12;
+  const gap = s.momentDueAt - s.updated;
+  assert.ok(gap >= 10 * 60 * 1000 && gap < 25 * 60 * 1000);
+  G.resolveMoment(s, s.updated, 'miss', 0.5);
+  assert.equal(s.bond, 11);
+  const before = s.bond;
+  G.resolveMoment(s, s.updated, 'defer', 0);
+  assert.equal(s.bond, before);
+  s.bond = 99;
+  G.resolveMoment(s, s.updated, 'hit', 0);
+  assert.equal(s.bond, 100);
+  s.bond = 0;
+  G.resolveMoment(s, s.updated, 'miss', 0);
+  assert.equal(s.bond, 0);
+  s.health = 19;
+  s.momentDueAt = s.updated;
+  assert.equal(G.startMoment(s, s.updated, 0), null);
+  assert.throws(() => G.startMoment(s, s.updated, 1));
+  assert.throws(() => G.resolveMoment(s, s.updated, 'skip', 0));
+  const raw = JSON.parse(JSON.stringify(pet('dog')));
+  delete raw.momentDueAt;
+  delete raw.momentLastId;
+  const loaded = G.load(raw, null, NOW + HOUR);
+  assert.equal(loaded.momentDueAt, NOW + HOUR + 10 * 60 * 1000);
+  assert.equal(loaded.momentLastId, null);
 });

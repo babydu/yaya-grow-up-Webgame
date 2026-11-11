@@ -37,6 +37,15 @@
     assert(integer(config.start, 23) && integer(config.end, 23), '夜间时段无效');
     night = { enabled: config.enabled, start: config.start, end: config.end };
   }
+  const PACE = { tight: 0.75, normal: 1, relaxed: 1.5 };
+  let pace = 'normal';
+  function configurePace(id) {
+    assert(own(PACE, id), '养育节奏无效');
+    pace = id;
+  }
+  function paceHours(hours) {
+    return hours * PACE[pace];
+  }
   const ages = [0, 30, 180, 360];
   const experience = [0, 100, 300, 600];
   const names = ['初生期', '探索期', '成长期', '成年期'];
@@ -50,16 +59,50 @@
     return (stageLabels[type] || stageLabels.cat)[index];
   }
   const profiles = {
-    cat: { name: '橘汐', kind: '小猫', description: '陪伴小猫咪橘汐慢慢长大。' },
-    dog: { name: '麦芽', kind: '小狗', description: '陪伴小狗麦芽探索世界。' },
-    baby: { name: '阿团', kind: '宝宝', description: '回应宝宝阿团的每一次需要。' },
-    plant: { name: '团子', kind: '小植物', description: '陪小植物团子从破土走到盛放。' }
+    cat: { name: '橘汐', kind: '小猫', description: '陪伴小猫咪橘汐慢慢长大。',
+      rhythm: '慢热柔软；偶尔打嗝、想玩球或做噩梦，10 秒内可回应。' },
+    dog: { name: '麦芽', kind: '小狗', description: '陪伴小狗麦芽探索世界。',
+      rhythm: '热情迎接；偶尔打嗝、想玩球或做噩梦，10 秒内可回应。' },
+    baby: { name: '阿团', kind: '宝宝', description: '回应宝宝阿团的每一次需要。',
+      rhythm: '会握住手指；偶尔打嗝、想玩球或做噩梦，10 秒内可回应。' },
+    plant: { name: '团子', kind: '小植物', description: '陪小植物团子从破土走到盛放。',
+      rhythm: '安静养成，不会弹出短时小事件。' }
   };
+  const MOMENT_MIN = 10 * 60 * 1000;
+  const MOMENT_SPAN = 15 * 60 * 1000;
+  const MOMENT_WINDOW = 10000;
+  const momentCatalog = {
+    cat: [
+      { id: 'cat-hiccup', prompt: '{name}打了个小小的嗝。', action: '轻轻拍拍背' },
+      { id: 'cat-ball', prompt: '{name}盯着毛线球，想玩一会儿。', action: '陪它玩球' },
+      { id: 'cat-dream', prompt: '{name}睡着时忽然抖了一下，像做了噩梦。', action: '安抚一下' }
+    ],
+    dog: [
+      { id: 'dog-hiccup', prompt: '{name}打了个响嗝，有点不好意思。', action: '摸摸肚子' },
+      { id: 'dog-ball', prompt: '{name}把球推到你脚边，眼睛亮亮的。', action: '扔一次球' },
+      { id: 'dog-dream', prompt: '{name}睡着后腿在空中蹬了蹬，像在跑一场噩梦。', action: '轻声安慰' }
+    ],
+    baby: [
+      { id: 'baby-hiccup', prompt: '{name}打嗝了，小肩膀一抖一抖。', action: '轻轻拍背' },
+      { id: 'baby-ball', prompt: '{name}伸出手，想够那个小球。', action: '递过去' },
+      { id: 'baby-dream', prompt: '{name}睡着后皱了皱眉，像做了噩梦。', action: '轻轻哄哄' }
+    ],
+    plant: []
+  };
+  function moments(type) {
+    return (momentCatalog[type] || []).map(item => Object.freeze({
+      id: item.id, prompt: item.prompt, action: item.action
+    }));
+  }
+  function unitRoll(roll) {
+    assert(typeof roll === 'number' && Number.isFinite(roll) && roll >= 0 && roll < 1, '随机值无效');
+    return roll;
+  }
   const careMeta = {
     cat: { actions: ['喂养', '清洁小窝', '陪伴玩耍', '安抚休息'], needs: ['饱腹感', '洁净度', '好心情', '精力值'] },
     dog: { actions: ['喂养', '清洁小窝', '陪伴玩耍', '安抚休息'], needs: ['饱腹感', '洁净度', '好心情', '精力值'] },
     baby: { actions: ['喂养', '换尿裤', '陪伴玩耍', '安抚休息'], needs: ['饱腹感', '洁净度', '好心情', '精力值'] },
-    plant: { actions: ['浇水', '擦叶除虫', '晒太阳', '安静生长'], needs: ['水分', '洁净度', '阳光', '养分'] }
+    plant: { actions: ['浇水', '擦叶除虫', '晒太阳', '施肥'], needs: ['水分', '洁净度', '阳光', '养分'] }
   };
   const catalog = [];
   function product(id, name, icon, category, types, minStage, price, pack, gain, description) {
@@ -80,9 +123,16 @@
     [45, 0, 0, 5], '成长期辅食，游戏中的简化养育设定。');
   product('baby-food-3', '宝宝均衡餐', 'bag', 'food', ['baby'], 3, 18, 5,
     [50, 0, 0, 5], '幼儿期的多样均衡餐。');
-  for (const [type, name] of [['cat', '猫砂'], ['dog', '尿垫'], ['baby', '尿裤']]) {
-    product(type + '-clean', name, 'clean', 'clean', [type], 0, 10, 5,
-      [0, 45, 0, 0], '日常清洁消耗品。');
+  const cleanNames = { cat: '猫砂', dog: '尿垫', baby: '尿裤' };
+  const cleanHint = '档位差为游戏模拟，现实照护请咨询专业人士。';
+  for (const type of ['cat', 'dog', 'baby']) {
+    const name = cleanNames[type];
+    product(type + '-clean-basic', '基础' + name, 'clean', 'clean', [type], 0, 8, 5,
+      [0, 35, 0, 0], '基础' + name + '，一次照料洁净度 +35。' + cleanHint);
+    product(type + '-clean', '舒适' + name, 'clean', 'clean', [type], 0, 10, 5,
+      [0, 45, 0, 0], '舒适' + name + '，一次照料洁净度 +45。旧存档中的同名物资即本档。' + cleanHint);
+    product(type + '-clean-plus', '优质' + name, 'clean', 'clean', [type], 0, 16, 5,
+      [0, 55, 0, 0], '优质' + name + '，一次照料洁净度 +55。' + cleanHint);
     product(type + '-nutrition', profiles[type].kind + '营养均衡主食组合', 'leaf', 'nutrition',
       [type], 2, 16, 3, [50, 0, 0, 15],
       '每份含当前适龄完整主食与普通营养食品，可作为一餐；增加游戏饱腹与精力属性，无医疗用途。');
@@ -90,15 +140,22 @@
       [type], 0, 12, 3, [0, 0, 45, 0], '一次陪玩消耗一份玩具使用次数。');
   }
   product('plant-milk', '植物营养液', 'bottle', 'food', ['plant'], 0, 10, 5,
-    [45, 0, 0, 5], '萌芽期专用营养液，稀释后浇灌。');
+    [0, 0, 0, 45], '萌芽期专用营养液，稀释后施入盆土。');
   for (let i = 1; i < 4; i++) {
     product('plant-food-' + i, profiles.plant.kind + stageLabels.plant[i] + '期花肥', 'bag', 'food',
-      ['plant'], i, 12 + i * 2, 5, [45, 0, 0, 5], '与当前成长阶段匹配的日常花肥。');
+      ['plant'], i, 12 + i * 2, 5, [0, 0, 0, 45], '与当前成长阶段匹配的日常花肥，一次施肥养分 +45。');
+    product('plant-food-' + i + '-plus', profiles.plant.kind + stageLabels.plant[i] + '期优质花肥', 'bag', 'food',
+      ['plant'], i, 18 + i * 2, 5, [0, 0, 0, 55],
+      '优质花肥，一次施肥养分 +55。档位差为游戏模拟，现实养护请咨询园艺专业人士。');
   }
-  product('plant-clean', '叶面清洁喷雾', 'clean', 'clean', ['plant'], 0, 10, 5,
-    [0, 45, 0, 0], '轻轻擦去叶面灰尘，保持洁净。');
+  product('plant-clean-basic', '基础叶面喷雾', 'clean', 'clean', ['plant'], 0, 8, 5,
+    [0, 35, 0, 0], '基础叶喷，一次擦叶洁净度 +35。' + cleanHint);
+  product('plant-clean', '舒适叶面喷雾', 'clean', 'clean', ['plant'], 0, 10, 5,
+    [0, 45, 0, 0], '舒适叶喷，一次擦叶洁净度 +45。旧存档中的同名物资即本档。' + cleanHint);
+  product('plant-clean-plus', '优质叶面喷雾', 'clean', 'clean', ['plant'], 0, 16, 5,
+    [0, 55, 0, 0], '优质叶喷，一次擦叶洁净度 +55。' + cleanHint);
   product('plant-nutrition', '植物营养均衡组合', 'leaf', 'nutrition', ['plant'], 2, 16, 3,
-    [50, 0, 0, 15], '每份含适龄花肥与营养液，可作为一次完整养护。');
+    [15, 0, 0, 50], '每份含适龄花肥与营养液，可作为一次完整施肥。');
   product('plant-toy', '植物陪伴小风铃', 'heart', 'comfort', ['plant'], 0, 12, 3,
     [0, 0, 45, 0], '晒太阳时挂在盆边，叮咚作响陪它度过一段时光。');
   product('medicine-kit', '安心药箱', 'heart', 'medical', ['baby', 'cat', 'dog', 'plant'], 0, 25, 1,
@@ -181,7 +238,7 @@
     assert(number(s.seconds) && number(s.bond, 100) && integer(s.stageIndex, 3));
     if (own(s, 'emotionalMilestones')) {
       assert(Array.isArray(s.emotionalMilestones) && s.emotionalMilestones.length <= 2
-        && s.emotionalMilestones.every(n => [30, 65].includes(n) && n <= s.bond)
+        && s.emotionalMilestones.every(n => [30, 65].includes(n))
         && new Set(s.emotionalMilestones).size === s.emotionalMilestones.length);
     }
     assert(s.stageIndex <= eligibleStage(s));
@@ -236,6 +293,9 @@
     assert(s.checkin.date === '' || s.checkin.date <= date(s.updated));
     assert(validDate(s.reliefDate, true) && (s.reliefDate === '' || s.reliefDate <= date(s.updated)));
     assert(s.lastTouch === null || (timestamp(s.lastTouch) && s.lastTouch <= s.updated));
+    if (own(s, 'momentDueAt')) assert(s.momentDueAt === null || timestamp(s.momentDueAt));
+    if (own(s, 'momentLastId')) assert(s.momentLastId === null
+      || (typeof s.momentLastId === 'string' && s.momentLastId.length >= 1 && s.momentLastId.length <= 40));
     if (own(s, 'progress')) assert(Array.isArray(s.progress) && s.progress.length === 4
       && s.progress.every((n, i) => number(n, legacyDurations[i])));
     if (own(s, 'items')) assert(Array.isArray(s.items) && s.items.length <= 3
@@ -249,9 +309,12 @@
       if (own(t, 'quantity')) assert(integer(t.quantity) && t.quantity >= 1 && t.quantity <= 12);
       const units = t.quantity || 1;
       assert(t.productId === null ? units === 1 : true);
-      const categories = { food: ['food', 'nutrition'], clean: ['clean'], mood: ['comfort'], energy: [] };
+      const categories = s.selected === 'plant'
+        ? { food: ['food', 'nutrition'], clean: ['clean'], mood: ['comfort'], energy: ['food', 'nutrition'] }
+        : { food: ['food', 'nutrition'], clean: ['clean'], mood: ['comfort'], energy: [] };
+      const freeActions = s.selected === 'plant' ? ['food', 'mood', 'energy'] : ['mood', 'energy'];
       // A paid task keeps its original product and duration after a stage change.
-      assert(t.productId === null ? ['mood', 'energy'].includes(t.actionId)
+      assert(t.productId === null ? freeActions.includes(t.actionId)
         : catalog.some(p => p.id === t.productId && p.types.includes(s.selected)
           && p.minStage <= stage(s).index && categories[t.actionId].includes(p.category)));
       assert(t.actionId === 'food'
@@ -272,7 +335,8 @@
       inventory: {}, logs: [], task: null, lastCare: {}, emotionalMilestones: [], worn: emptyWorn(),
       health: 100, status: 'alive', criticalAt: null, leftAt: null, name: null,
       daily: { date: date(now), seconds: 0, count: 0, earned: 0 },
-      checkin: { date: '', streak: 0 }, reliefDate: '', stageIndex: 0, lastTouch: null };
+      checkin: { date: '', streak: 0 }, reliefDate: '', stageIndex: 0, lastTouch: null,
+      momentDueAt: null, momentLastId: null };
   }
   function eligibleStage(s) {
     const age = Math.max(0, (s.updated - s.born) / DAY * 30);
@@ -288,8 +352,8 @@
     const progress = next ? Math.min(1, Math.max(0, (age - ages[index]) / (next.age - ages[index])),
       Math.max(0, (s.xp - experience[index]) / (next.xp - experience[index]))) * 100 : 100;
     return { index, name: stageName(s.selected, index), age, label: `游戏年龄 ${age} 天`, progress, next,
-      feedSeconds: [300, 240, 180, 120][index], feedHours: [3, 4, 5, 6][index],
-      cleanHours: s.selected === 'baby' ? 3 : 6,
+      feedSeconds: [300, 240, 180, 120][index], feedHours: paceHours([3, 4, 5, 6][index]),
+      cleanHours: paceHours(s.selected === 'baby' ? 4.5 : 5),
       description: '真实 1 天 = 游戏 30 天；晋级同时需要年龄与有效照护经验。此为游戏设定。' };
   }
   function log(s, now, text) {
@@ -332,10 +396,16 @@
       const starving = s.needs.filter(v => v < 10).length;
       if (starving > 0) s.health = Math.max(0, s.health - Math.min(3, starving * 0.75) * activeHours);
       else if (s.needs.every(v => v >= 30)) s.health = Math.min(100, s.health + hours);
+      let bondDrain = 0.1;
+      if (starving > 0) bondDrain += Math.min(0.8, starving * 0.25);
+      if (s.criticalAt !== null) bondDrain += 0.6;
+      s.bond = Math.max(0, s.bond - bondDrain * activeHours);
       if (s.health <= 0 && s.criticalAt === null) {
         s.health = 0;
         s.criticalAt = now;
-        log(s, now, `${petName(s)}的健康度耗尽了，进入病危状态。24 小时内用回春灵药还能挽回。`);
+        const hurt = s.bond > 0;
+        if (hurt) s.bond = Math.max(0, s.bond - 8);
+        log(s, now, `${petName(s)}的健康度耗尽了，进入病危状态。24 小时内用回春灵药还能挽回。${hurt ? '亲密度也受到了伤害。' : ''}`);
       }
       if (s.criticalAt !== null && s.health >= 20) {
         s.criticalAt = null;
@@ -397,6 +467,7 @@
     s.inventory[type + '-milk'] = (s.inventory[type + '-milk'] || 0) + 5;
     s.inventory[type + '-clean'] = (s.inventory[type + '-clean'] || 0) + 5;
     log(s, now, `确认陪伴${petName(s)}成长。`);
+    if (type !== 'plant') s.momentDueAt = now + MOMENT_MIN;
     rewardStages(s, now);
     rewardEmotions(s, now);
     return s;
@@ -408,22 +479,35 @@
       || (s.selected === 'baby' && p.id === 'baby-milk' ? index <= 2 : index === p.minStage));
   }
   function products(s, actionId) {
-    const categories = { food: ['food', 'nutrition'], clean: ['clean'], mood: ['comfort'], energy: [] };
+    const categories = s.selected === 'plant'
+      ? { food: [], clean: ['clean'], mood: ['comfort'], energy: ['food', 'nutrition'] }
+      : { food: ['food', 'nutrition'], clean: ['clean'], mood: ['comfort'], energy: [] };
     if (!own(categories, actionId)) return [];
     return catalog.filter(p => available(s, p) && categories[actionId].includes(p.category));
+  }
+  function careQuantityCap(actionId, productId) {
+    if (actionId === 'clean' || actionId === 'mood') return 1;
+    const p = catalog.find(item => item.id === productId);
+    if (p && p.category === 'nutrition') return 1;
+    if (actionId === 'food') return 2;
+    if (actionId === 'energy' && p && p.category === 'food') return 2;
+    return 1;
   }
   function careOptions(s) {
     const st = stage(s);
     return ids.map((id, i) => {
-      const intervalHours = [st.feedHours, st.cleanHours, 1, 4][i];
+      const intervalHours = [st.feedHours, st.cleanHours, paceHours(3.5), paceHours(4)][i];
       const last = s.lastCare[id];
       const dueAt = last === undefined ? s.updated : s.needs[i] < 35
         ? last + 60000 : last + intervalHours * HOUR;
       return { id, name: careMeta[s.selected].actions[i],
         need: careMeta[s.selected].needs[i],
-        icon: ['bottle', 'clean', 'heart', 'moon'][i], seconds: [st.feedSeconds, 30, 60, 120][i],
+        icon: (s.selected === 'plant' ? ['bottle', 'clean', 'heart', 'leaf'] : ['bottle', 'clean', 'heart', 'moon'])[i],
+        seconds: [st.feedSeconds, 30, 60, 120][i],
         intervalHours, gain: [45, 45, 35, 40][i], dueAt,
-        description: ['适量喂养，饱腹达到 80 时暂停喂养。', '保持干净舒适。', '专注陪伴。', '安心休息。'][i] };
+        description: (s.selected === 'plant'
+          ? ['适量浇水，水分达到 80 时暂停。', '擦叶除虫，保持叶面干净。', '搬到光线合适的地方晒一会儿。', '薄肥勤施，给土壤补养分。']
+          : ['适量喂养，饱腹达到 80 时暂停喂养。', '保持干净舒适。', '专注陪伴。', '安心休息。'])[i] };
     });
   }
   function begin(s, actionId, productId, now, quantity) {
@@ -435,15 +519,21 @@
     if (s.task) return s.task.actionId === actionId && s.task.productId === pid ? null : '请先完成当前任务';
     if (s.health < 20 && actionId === 'mood') return '太虚弱了，先照顾好身体';
     const units = quantity === undefined ? 1 : quantity;
-    if (!Number.isInteger(units) || units < 1 || units > 12) return '物资数量无效';
+    if (!Number.isInteger(units) || units < 1) return '物资数量无效';
     if (pid === null && units !== 1) return '这种照护无需选择数量';
+    const cap = careQuantityCap(actionId, pid);
+    if (units > cap) {
+      if (cap === 2) return actionId === 'energy' ? '一次施肥最多两份，薄肥勤施就好' : '一餐最多两份，一次喂完就好';
+      return '这次照料一次只用一份';
+    }
     const option = careOptions(s).find(a => a.id === actionId);
     const index = ids.indexOf(actionId);
     if (s.needs[index] >= (actionId === 'food' ? 80 : 95)) return '当前需求已满足';
     if (now < option.dueAt) return '照护仍在冷却中';
     const p = products(s, actionId).find(item => item.id === pid);
     if (pid !== null && !p) return '商品不适用于当前对象、动作或阶段';
-    if (pid === null && ['food', 'clean'].includes(actionId)) return '请选择消耗品';
+    const paid = s.selected === 'plant' ? ['energy', 'clean'] : ['food', 'clean'];
+    if (pid === null && paid.includes(actionId)) return '请选择消耗品';
     if (p && !(s.inventory[p.id] >= units)) return '库存不足';
     if (p) s.inventory[p.id] -= units;
     const seconds = option.seconds * units;
@@ -548,16 +638,18 @@
     if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
     if (s.reliefDate === date(now)) return '今日已领取基础补给';
     let supplied = false;
-    for (const action of ['food', 'clean']) {
+    const supplyActions = s.selected === 'plant' ? ['energy', 'clean'] : ['food', 'clean'];
+    for (const action of supplyActions) {
       const options = products(s, action);
       if (options.some(p => (s.inventory[p.id] || 0) > 0)
         || (s.task && s.task.actionId === action)) continue;
-      s.inventory[options[0].id] = 2;
+      const id = action === 'clean' ? s.selected + '-clean' : options[0].id;
+      s.inventory[id] = 2;
       supplied = true;
     }
     if (!supplied) return '基础物资充足';
     s.reliefDate = date(now);
-    log(s, now, '领取基础补给，缺少的主食或清洁用品各补充 2 份。');
+    log(s, now, '领取基础补给，缺少的消耗品各补充 2 份。');
     return null;
   }
   function remedy(s, id, now) {
@@ -576,10 +668,11 @@
     }
     if (id === 'revive-elixir') {
       if (s.criticalAt === null && s.health >= 70) return `${profiles[s.selected].name}状态还好，灵药先收好`;
+      const fromCritical = s.criticalAt !== null;
       s.inventory[id]--;
       s.health = Math.min(100, s.health + 60);
       s.criticalAt = null;
-      log(s, now, `使用了${p.name}，${petName(s)}的健康度恢复到 ${Math.round(s.health)}。`);
+      log(s, now, `使用了${p.name}，${petName(s)}的健康度恢复到 ${Math.round(s.health)}。${fromCritical ? '身体在恢复，心里的距离还要慢慢陪回来。' : ''}`);
       return null;
     }
     return '商品无效';
@@ -612,6 +705,43 @@
     };
     return { message: responses[s.selected][s.bond >= 65 ? 2 : s.bond >= 30 ? 1 : 0], rewarded };
   }
+  function scheduleMoment(s, now, roll) {
+    clock(s, now);
+    unitRoll(roll);
+    if (!s.adopted || s.status !== 'alive' || s.selected === 'plant' || moments(s.selected).length === 0) {
+      s.momentDueAt = null;
+      return null;
+    }
+    s.momentDueAt = now + MOMENT_MIN + Math.floor(roll * MOMENT_SPAN);
+    return s.momentDueAt;
+  }
+  function startMoment(s, now, roll) {
+    clock(s, now);
+    unitRoll(roll);
+    const pool = moments(s.selected);
+    if (!s.adopted || s.status !== 'alive' || s.health < 20 || pool.length === 0) return null;
+    if (s.momentDueAt !== null && now < s.momentDueAt) return null;
+    const choices = pool.filter(item => item.id !== s.momentLastId);
+    const pick = (choices.length ? choices : pool)[Math.floor(roll * (choices.length ? choices.length : pool.length))];
+    s.momentLastId = pick.id;
+    s.momentDueAt = now + MOMENT_MIN;
+    return { id: pick.id, prompt: pick.prompt.replace(/\{name\}/g, petName(s)), action: pick.action, until: now + MOMENT_WINDOW };
+  }
+  function resolveMoment(s, now, outcome, roll) {
+    refresh(s, now);
+    assert(outcome === 'hit' || outcome === 'miss' || outcome === 'defer', '短时事件结果无效');
+    const name = petName(s);
+    if (outcome === 'hit') {
+      s.bond = Math.min(100, s.bond + 2);
+      log(s, now, `回应了${name}的一个小心思。亲密度 +2。`);
+      rewardEmotions(s, now);
+    } else if (outcome === 'miss') {
+      s.bond = Math.max(0, s.bond - 1);
+      log(s, now, `${name}的小心思过去了。亲密度 -1。`);
+    }
+    scheduleMoment(s, now, roll);
+    return s;
+  }
   function milestones(s) {
     return names.map((_, i) => ({ id: 'stage-' + i, title: stageName(s.selected, i),
       description: `游戏年龄 ${ages[i]} 天且有效照护经验 ${experience[i]}。`,
@@ -632,8 +762,12 @@
       const s = JSON.parse(JSON.stringify(raw));
       normalizeWorn(s);
       if (s.name === undefined) s.name = null;
+      if (s.momentDueAt === undefined) s.momentDueAt = null;
+      if (s.momentLastId === undefined) s.momentLastId = null;
       if (s.health === undefined) s.health = 100;
       if (s.status === undefined) { s.status = 'alive'; s.criticalAt = null; s.leftAt = null; }
+      if (s.adopted && s.status === 'alive' && s.selected !== 'plant' && s.momentDueAt === null)
+        s.momentDueAt = now + MOMENT_MIN;
       return refresh(s, now);
     }
     if (rawV1 === null || rawV1 === undefined) return create(now);
@@ -662,6 +796,6 @@
   }
   return Object.freeze({ profiles, catalog, create, adopt, load, stage, refresh, careOptions,
     products, begin, advance, checkin, buy, wear, relief, touch, milestones,
-    remedy, restart, healthTier, configureNight, criticalRemaining, petName,
-    accessorySlot, isEquipped });
+    remedy, restart, healthTier, configureNight, configurePace, criticalRemaining, petName,
+    accessorySlot, isEquipped, careQuantityCap, moments, scheduleMoment, startMoment, resolveMoment });
 });
