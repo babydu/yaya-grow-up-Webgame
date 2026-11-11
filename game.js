@@ -225,7 +225,7 @@ function renderToolbox() {
   el.hidden = false;
   const rows = meds.map(item => {
     const count = state.inventory[item.id] || 0;
-    const ok = state.health < 70 || state.criticalAt !== null;
+    const ok = item.id === 'medicine-kit' ? (state.health < 70 && state.criticalAt === null) : (state.health < 70 || !!state.criticalAt);
     const iconBox = `<span class="product-icon">${icon(item.icon)}</span>`;
     const info = `<div class="toolbox-info"><strong>${item.name}</strong><p>${item.description}</p><small>${item.id === 'medicine-kit' ? '恢复 40 健康度' : '恢复 60 健康度 · 病危时也可使用'}</small></div>`;
     const action = count > 0
@@ -266,7 +266,7 @@ function renderSecondary() {
         const info=`<div class="pack-info"><strong>${item.name}${tag?' <span class="worn-tag">'+tag+'</span>':''}</strong><p>${item.description}</p><small>${item.category==='accessory'?(equipped?(place?'摆放中 · 收起后回到背包':'佩戴中 · 脱下后回到背包'):(place?'收在背包 · 可随时放下':'收在背包 · 可随时穿上')):item.category==='medical'?`剩余 ${count} 份 · ${item.id==='medicine-kit'?'恢复 40 健康度':'恢复 60 健康度'}`:`剩余 ${count} 份 · ${gainHint(item)||'照护时消耗'}`}</small></div>`;
         let action='';
         if(item.category==='medical'){
-          const ok=item.id==='medicine-kit'?state.health<70:(state.health<70||!!state.criticalAt);
+          const ok=item.id==='medicine-kit'?(state.health<70&&!state.criticalAt):(state.health<70||!!state.criticalAt);
           action=`<button data-toolbox="${item.id}" ${ok?'':'disabled'}>${ok?(count>1?`使用 · 共 ${count} 份`:'使用'):'暂不需要'}</button>`;
         } else if(item.category==='accessory'){
           const stageOk=st.index>=item.minStage;
@@ -467,6 +467,7 @@ function updateTimer() {
   $('dialog-icon').classList.toggle('care-running',running);
   setGainNote();
 }
+function yieldK(){return 0.55+0.45*state.health/100;}
 function setGainNote() {
   const el=$('care-gain');
   const idx=needIndex[careId];
@@ -476,13 +477,14 @@ function setGainNote() {
   if(!pid&&paidCare(careId)){el.hidden=true;el.textContent='';return;}
   const p=pid?G.catalog.find(item=>item.id===pid):null;
   const nominal=p&&pid?p.gain:[0,0,0,0].map((_,j)=>j===idx?[45,45,35,40][idx]:0);
+  const k=yieldK();
   const labels=G.careOptions(state).map(a=>a.need);
   const parts=nominal.map((g,j)=>{
     if(g<=0)return '';
-    if(task)return `${labels[j]} +${g*units}`;
-    const eff=Math.round((Math.max(0,Math.min(100,state.needs[j]+g*units)-state.needs[j]))*100)/100;
+    if(task)return `${labels[j]} +${Math.round(g*units*k*100)/100}`;
+    const eff=Math.round((Math.max(0,Math.min(100,state.needs[j]+g*units*k)-state.needs[j]))*100)/100;
     if(eff<=0)return '';
-    return `${labels[j]} +${Math.round(eff)}${eff<g*units-1e-9?'（受当前需求限制）':''}`;
+    return `${labels[j]} +${Math.round(eff)}${eff<g*units*k-1e-9?'（受当前需求限制）':''}`;
   }).filter(Boolean);
   el.hidden=!parts.length;
   el.textContent=parts.length?`本次预计恢复：${parts.join(' · ')}`:'';

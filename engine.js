@@ -516,6 +516,7 @@
     if (!ids.includes(actionId)) return '照护动作无效';
     const pid = productId === undefined ? null : productId;
     if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
+    if (s.criticalAt !== null) return `${profiles[s.selected].name}病危了，先用回春灵药挽回`;
     if (s.task) return s.task.actionId === actionId && s.task.productId === pid ? null : '请先完成当前任务';
     if (s.health < 20 && actionId === 'mood') return '太虚弱了，先照顾好身体';
     const units = quantity === undefined ? 1 : quantity;
@@ -555,7 +556,9 @@
     const i = ids.indexOf(t.actionId);
     const p = catalog.find(item => item.id === t.productId);
     const units = t.quantity || 1;
-    const gain = p ? p.gain.map(v => v * units) : ids.map((_, j) => i === j ? [45, 45, 35, 40][i] : 0);
+    const base = p ? p.gain.map(v => v * units) : ids.map((_, j) => i === j ? [45, 45, 35, 40][i] : 0);
+    const yieldK = 0.55 + 0.45 * s.health / 100;
+    const gain = base.map(v => v * yieldK);
     const effective = s.needs.some((v, j) => gain[j] > 0 && v < 100);
     s.needs = s.needs.map((v, j) => Math.min(100, v + gain[j]));
     s.count = Math.min(LIMIT, s.count + 1);
@@ -599,7 +602,10 @@
     if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
     const p = catalog.find(item => item.id === id);
     if (!p || !available(s, p)) return '商品无效或不适龄';
-    if (id === 'medicine-kit' && s.health >= 70) return `${profiles[s.selected].name}很健康，暂不需要药箱`;
+    if (id === 'medicine-kit') {
+      if (s.criticalAt !== null) return `${profiles[s.selected].name}病危了，先用回春灵药挽回`;
+      if (s.health >= 70) return `${profiles[s.selected].name}很健康，暂不需要药箱`;
+    }
     if (s.points < p.price) return '积分不足';
     if ((s.inventory[id] || 0) > LIMIT - p.pack) return '库存已达上限';
     s.points -= p.price;
@@ -660,6 +666,7 @@
     if (!p) return '商品无效';
     if (!(s.inventory[id] > 0)) return '库存不足，请先在生活小铺兑换';
     if (id === 'medicine-kit') {
+      if (s.criticalAt !== null) return `${profiles[s.selected].name}病危了，安心药箱帮不上忙，用回春灵药吧`;
       if (s.health >= 70) return `${profiles[s.selected].name}很健康，暂不需要药箱`;
       s.inventory[id]--;
       s.health = Math.min(100, s.health + 40);

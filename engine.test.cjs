@@ -358,6 +358,8 @@ test('baby complementary feeding retains formula through stage 2 only', () => {
   const s = pet('baby');
   s.xp = 300;
   G.refresh(s, NOW + 6 * DAY);
+  s.health = 100;
+  s.criticalAt = null;
   const foods = G.products(s, 'food').map(p => p.id);
   assert.ok(foods.includes('baby-milk'));
   assert.ok(foods.includes('baby-food-2'));
@@ -373,6 +375,8 @@ test('nutrition is a complete meal: one stock deduction, capped gains and relief
     const s = pet(type);
     s.xp = 300;
     G.refresh(s, NOW + 6 * DAY);
+    s.health = 100;
+    s.criticalAt = null;
     s.inventory = { [type + '-clean']: 1 };
     const id = type + '-nutrition';
     const feed = type === 'plant' ? 'energy' : 'food';
@@ -968,6 +972,8 @@ test('clean uses one unit and quality tiers change cleanliness', () => {
   const meal = pet();
   meal.xp = 300;
   G.refresh(meal, NOW + 6 * DAY);
+  meal.health = 100;
+  meal.criticalAt = null;
   meal.points = 100;
   assert.equal(G.buy(meal, 'cat-nutrition', meal.updated), null);
   assert.equal(G.begin(meal, 'food', 'cat-nutrition', meal.updated, 2), '这次照料一次只用一份');
@@ -1122,4 +1128,60 @@ test('short moments: resolve refreshes stale save before writing the log', () =>
   assert.equal(s.momentLastId, m.id);
   assert.equal(s.updated, NOW + 5000);
   assert.match(s.logs.at(-1).text, /亲密度 \+2/);
+});
+
+test('critical care lock, medicine gating and health-scaled yields', () => {
+  const s = pet();
+  const foodId = G.products(s, 'food')[0].id;
+  s.health = 0;
+  s.criticalAt = NOW;
+  for (const action of ['food', 'clean', 'mood', 'energy']) {
+    const pid = action === 'food' ? foodId : null;
+    assert.match(G.begin(s, action, pid, NOW), /病危了，先用回春灵药挽回/);
+  }
+  assert.equal(s.task, null);
+  assert.equal(G.buy(s, 'medicine-kit', NOW), '橘汐病危了，先用回春灵药挽回');
+  s.inventory['medicine-kit'] = 1;
+  assert.match(G.remedy(s, 'medicine-kit', NOW), /病危了，安心药箱帮不上忙/);
+  assert.equal(s.inventory['medicine-kit'], 1);
+  assert.equal(G.buy(s, 'revive-elixir', NOW), null);
+  assert.equal(G.remedy(s, 'revive-elixir', NOW), null);
+  assert.equal(s.criticalAt, null);
+  assert.equal(s.health, 60);
+  s.needs[3] = 20;
+  const moodBase = s.needs[2];
+  assert.equal(G.begin(s, 'mood', null, NOW), null);
+  G.advance(s, 60000, NOW);
+  assert.ok(Math.abs(s.needs[2] - (moodBase + 35 * 0.82)) < 1e-9);
+
+  const h = pet();
+  const hid = G.products(h, 'food')[0].id;
+  h.inventory[hid] = 1;
+  const foodBase = h.needs[0];
+  assert.equal(G.begin(h, 'food', hid, NOW), null);
+  G.advance(h, 3600000, NOW);
+  assert.ok(Math.abs(h.needs[0] - (foodBase + 45)) < 1e-9);
+
+  const w = pet();
+  const wid = G.products(w, 'food')[0].id;
+  w.inventory[wid] = 1;
+  w.health = 20;
+  w.needs[3] = 20;
+  const weakBase = w.needs[0];
+  assert.equal(G.begin(w, 'food', wid, NOW), null);
+  G.advance(w, 3600000, NOW);
+  assert.ok(Math.abs(w.needs[0] - (weakBase + 45 * 0.64)) < 1e-9);
+
+  const c = pet();
+  const cid = G.products(c, 'food')[0].id;
+  c.inventory[cid] = 1;
+  const critBase = c.needs[0];
+  assert.equal(G.begin(c, 'food', cid, NOW), null);
+  c.health = 0;
+  c.criticalAt = NOW;
+  c.needs[3] = 20;
+  const done = G.advance(c, 3600000, NOW);
+  assert.equal(done.title, '照护完成');
+  assert.ok(Math.abs(c.needs[0] - (critBase + 45 * 0.55)) < 1e-9);
+  assert.equal(c.criticalAt, NOW);
 });
