@@ -1185,3 +1185,34 @@ test('critical care lock, medicine gating and health-scaled yields', () => {
   assert.ok(Math.abs(c.needs[0] - (critBase + 45 * 0.55)) < 1e-9);
   assert.equal(c.criticalAt, NOW);
 });
+
+// Accessory dye variants: three tints persist in state, variant 0 clears, guards reject misuse.
+{
+  const s = pet();
+  s.inventory['acc-cat-1'] = 1;
+  assert.equal(G.dye(s, 'acc-cat-1', 2, NOW), null);
+  assert.equal(s.tints['acc-cat-1'], 2);
+  assert.equal(G.dye(s, 'acc-cat-1', 2, NOW), null);
+  assert.equal(G.dye(s, 'acc-cat-1', 0, NOW), null);
+  assert.ok(!('acc-cat-1' in s.tints));
+  assert.equal(G.dye(s, 'acc-cat-1', 3, NOW), '染色方案无效');
+  assert.equal(G.dye(s, 'acc-cat-1', 1.5, NOW), '染色方案无效');
+  assert.equal(G.dye(s, 'food-cat-1', 1, NOW), '染色方案不适用于这件商品');
+  assert.equal(G.dye(s, 'acc-cat-2', 1, NOW), '请先在生活小铺兑换这件饰物');
+  const gone = pet();
+  gone.status = 'left';
+  gone.criticalAt = NOW - 1000;
+  gone.leftAt = NOW;
+  assert.equal(G.dye(gone, 'acc-cat-1', 1, NOW), '橘汐已经离开，开始新的陪伴吧');
+  const loaded = JSON.parse(JSON.stringify(s));
+  delete loaded.tints;
+  assert.deepEqual(G.load(JSON.stringify(loaded), null, NOW).tints, {});
+  const badId = JSON.parse(JSON.stringify(s));
+  badId.tints['food-cat-1'] = 1;
+  assert.throws(() => G.load(JSON.stringify(badId), null, NOW));
+  const badVar = JSON.parse(JSON.stringify(s));
+  badVar.tints['acc-cat-1'] = 5;
+  assert.throws(() => G.load(JSON.stringify(badVar), null, NOW));
+  assert.deepEqual(G.DYE.hues, [0, 30, 200]);
+  assert.deepEqual(G.DYE.names, ['本色', '暖调', '冷调']);
+}

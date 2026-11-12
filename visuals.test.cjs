@@ -93,4 +93,14 @@ const strHat = scene('cat', 3, 'acc-cat-1');
 assert.match(strHat, /data-worn="acc-cat-1"/);
 assert.ok(!strHat.includes('data-worn="acc-cat-3"'));
 
+// Dye variants apply a hue-rotate filter to the worn accessory overlay.
+const tinted = scene('cat', 3, { wear: 'acc-cat-1', place: null }, 'healthy', { 'acc-cat-1': 2 });
+assert.match(tinted, /hue-rotate\(200deg\)/);
+const warmed = scene('cat', 3, { wear: 'acc-cat-1', place: null }, 'healthy', { 'acc-cat-1': 1 });
+assert.match(warmed, /hue-rotate\(30deg\)/);
+const plainTint = scene('cat', 3, { wear: 'acc-cat-1', place: null }, 'healthy', {});
+assert.ok(!plainTint.includes('hue-rotate'));
+const noTintArg = scene('cat', 3, { wear: 'acc-cat-1', place: null }, 'healthy');
+assert.ok(!noTintArg.includes('hue-rotate'));
+
 console.log('通过：四角色场景含手绘背景与阶段立绘，饰物叠加、阶段锚点与领养肖像均指向图片资源且可区分。');

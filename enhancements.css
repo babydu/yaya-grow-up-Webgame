@@ -118,3 +118,6 @@
 .moment-card button{min-height:40px;padding:0 16px;background:#e9eedd;border-radius:10px;color:#536a46;font-weight:600}
 .moment-card small{display:block;margin-top:8px;font-size:11px;color:#9a8b78}
 @media(max-width:600px){.moment-card{bottom:86px;padding:12px}}
+.dye-dots{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}
+.dye-dot{width:14px;height:14px;border-radius:50%;background:#718365;border:1px solid #e4d7c4;padding:0;flex:none;cursor:pointer}
+.dye-dot.active{outline:2px solid #5b8a4e;outline-offset:1px}

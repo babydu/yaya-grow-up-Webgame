@@ -176,10 +176,11 @@ function render() {
   $('greeting-title').innerHTML = texture.greet + `<span class="tiny-leaf">${icon('leaf')}</span>`;
   $('room-weather').innerHTML = icon(texture.icon) + texture.weather;
   const worn = state.worn && typeof state.worn === 'object' ? state.worn : { wear: null, place: null };
-  const sceneKey = tier === 'left' ? 'left:' + state.leftAt : state.selected + ':' + st.index + ':' + (worn.wear || '') + ':' + (worn.place || '') + ':' + tier;
+  const tints = state.tints || {};
+  const sceneKey = tier === 'left' ? 'left:' + state.leftAt : state.selected + ':' + st.index + ':' + (worn.wear || '') + ':' + (tints[worn.wear] || 0) + ':' + (worn.place || '') + ':' + (tints[worn.place] || 0) + ':' + tier;
   if ($('room-art').dataset.sceneKey !== sceneKey) {
     $('room-art').dataset.sceneKey = sceneKey;
-    $('room-art').innerHTML = tier === 'left' ? memorial(p) : scene(state.selected, st.index, state.worn, tier);
+    $('room-art').innerHTML = tier === 'left' ? memorial(p) : scene(state.selected, st.index, state.worn, tier, tints);
   }
   $('room-art').dataset.day = part;
   const labels = actions.map(a => a.need);
@@ -263,6 +264,7 @@ function renderSecondary() {
         const equipped=item.category==='accessory'&&G.isEquipped(state,item.id);
         const place=item.category==='accessory'&&G.accessorySlot(item.id)==='place';
         const tag=equipped?(place?'摆放中':'穿戴中'):'';
+        const dots=item.category==='accessory'?`<span class="dye-dots" role="group" aria-label="饰物染色">${[0,1,2].map(v=>`<button class="dye-dot${(state.tints[item.id]||0)===v?' active':''}" data-dye="${item.id}" data-variant="${v}" title="染成${['本色','暖调','冷调'][v]}" style="filter:hue-rotate(${[0,30,200][v]}deg)"></button>`).join('')}</span>`:'';
         const info=`<div class="pack-info"><strong>${item.name}${tag?' <span class="worn-tag">'+tag+'</span>':''}</strong><p>${item.description}</p><small>${item.category==='accessory'?(equipped?(place?'摆放中 · 收起后回到背包':'佩戴中 · 脱下后回到背包'):(place?'收在背包 · 可随时放下':'收在背包 · 可随时穿上')):item.category==='medical'?`剩余 ${count} 份 · ${item.id==='medicine-kit'?'恢复 40 健康度':'恢复 60 健康度'}`:`剩余 ${count} 份 · ${gainHint(item)||'照护时消耗'}`}</small></div>`;
         let action='';
         if(item.category==='medical'){
@@ -274,7 +276,7 @@ function renderSecondary() {
         } else {
           action=`<button data-care="${careAct[item.category]}">去照护</button>`;
         }
-        return `<div class="pack-item">${media}${info}${action}</div>`;
+        return `<div class="pack-item">${media}${info}${action}${dots}</div>`;
       }).join('');
       return `<div class="section-heading"><h2>${name} <span class="heading-count">${items.length} 种</span></h2></div><div class="pack-grid">${rows}</div>`;
     }).join(''):'';
@@ -614,6 +616,7 @@ document.addEventListener('click',e=>{
     const placing=G.accessorySlot(id)==='place';
     execute(()=>G.wear(state,id,now()),wasWorn?'饰物已经收好。':placing?'饰物已经放下，去看看小屋吧。':'饰物已经穿好，去看看小屋吧。');
   }
+  if(b.dataset.dye!==undefined)execute(()=>G.dye(state,b.dataset.dye,Number(b.dataset.variant),now()),'染好了，房间里的搭配已经更新。');
   if(b.dataset.remedy)execute(()=>G.remedy(state,b.dataset.remedy,now()),'用上了，健康度正在回来，好好休息。');
   if(b.dataset.toolbox)execute(()=>G.remedy(state,b.dataset.toolbox,now()),'用上了，健康度正在回来，好好休息。');
   if(b.id==='revive-button')execute(()=>{if(!((state.inventory['revive-elixir']||0)>0)){const err=G.buy(state,'revive-elixir',now());if(err)return err;}return G.remedy(state,'revive-elixir',now());},`${profile().name}慢慢缓了过来。身体在恢复，心里的距离还要慢慢陪回来。`);

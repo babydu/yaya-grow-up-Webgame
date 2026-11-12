@@ -187,6 +187,8 @@
     'acc-plant-1': 'place', 'acc-plant-2': 'place', 'acc-plant-3': 'place', 'acc-plant-4': 'place'
   };
   freeze(ACC_SLOT);
+  const DYE = { hues: [0, 30, 200], names: ['本色', '暖调', '冷调'] };
+  freeze(DYE);
   function emptyWorn() { return { wear: null, place: null }; }
   function accessorySlot(id) { return ACC_SLOT[id] || null; }
   function normalizeWorn(s) {
@@ -266,6 +268,12 @@
         assertAcc(place);
       }
     }
+    if (own(s, 'tints')) {
+      assert(record(s.tints));
+      for (const [id, v] of Object.entries(s.tints)) {
+        assert(catalog.some(p => p.id === id && p.category === 'accessory') && integer(v) && v >= 0 && v <= 2);
+      }
+    }
     if (own(s, 'health')) assert(number(s.health, 100));
     if (own(s, 'name') && s.name !== null) {
       assert(typeof s.name === 'string' && s.name.length >= 1 && s.name.length <= 12);
@@ -332,7 +340,7 @@
     assert(timestamp(now), '时间无效');
     return { version: 2, selected: null, adopted: false, born: now, updated: now,
       needs: [40, 75, 65, 70], xp: 0, count: 0, seconds: 0, bond: 0, points: 60,
-      inventory: {}, logs: [], task: null, lastCare: {}, emotionalMilestones: [], worn: emptyWorn(),
+      inventory: {}, logs: [], task: null, lastCare: {}, emotionalMilestones: [], worn: emptyWorn(), tints: {},
       health: 100, status: 'alive', criticalAt: null, leftAt: null, name: null,
       daily: { date: date(now), seconds: 0, count: 0, earned: 0 },
       checkin: { date: '', streak: 0 }, reliefDate: '', stageIndex: 0, lastTouch: null,
@@ -638,6 +646,17 @@
     }
     return null;
   }
+  function dye(s, id, variant, now) {
+    refresh(s, now);
+    if (!s.adopted) return '请先确认养育对象';
+    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
+    const p = catalog.find(item => item.id === id);
+    if (!p || p.category !== 'accessory') return '染色方案不适用于这件商品';
+    if (!(s.inventory[id] > 0)) return '请先在生活小铺兑换这件饰物';
+    if (!integer(variant) || variant < 0 || variant > 2) return '染色方案无效';
+    if (variant === 0) delete s.tints[id]; else s.tints[id] = variant;
+    return null;
+  }
   function relief(s, now) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
@@ -772,6 +791,7 @@
       if (s.momentDueAt === undefined) s.momentDueAt = null;
       if (s.momentLastId === undefined) s.momentLastId = null;
       if (s.health === undefined) s.health = 100;
+      if (s.tints === undefined) s.tints = {};
       if (s.status === undefined) { s.status = 'alive'; s.criticalAt = null; s.leftAt = null; }
       if (s.adopted && s.status === 'alive' && s.selected !== 'plant' && s.momentDueAt === null)
         s.momentDueAt = now + MOMENT_MIN;
@@ -804,5 +824,5 @@
   return Object.freeze({ profiles, catalog, create, adopt, load, stage, refresh, careOptions,
     products, begin, advance, checkin, buy, wear, relief, touch, milestones,
     remedy, restart, healthTier, configureNight, configurePace, criticalRemaining, petName,
-    accessorySlot, isEquipped, careQuantityCap, moments, scheduleMoment, startMoment, resolveMoment });
+    accessorySlot, isEquipped, careQuantityCap, dye, DYE, moments, scheduleMoment, startMoment, resolveMoment });
 });

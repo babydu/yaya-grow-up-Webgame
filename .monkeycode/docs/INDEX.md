@@ -24,4 +24,4 @@ node browser.test.cjs
 浏览器测试依赖全局安装的 @playwright/test、Chromium 及对应 Linux 系统库。当前测试使用 channel chromium，可使用完整 Chromium 包，无需 headless-shell。浏览器测试覆盖 375、768、1440 像素宽度。
 
 ## 版本
-app.js 与 test.cjs 为保留的第一版实现，当前页面使用 v2 模块。新增方案位于 .monkeycode/specs/lifelike-care-v2/、ambient-bgm/、background-care/、bgm-now-playing/、design-pack-integration/、health-sickness-system/、realistic-care-quality/、plant-fertilize-nutrients/、care-pace/、short-moments/。
+app.js 与 test.cjs 为保留的第一版实现，当前页面使用 v2 模块。新增方案位于 .monkeycode/specs/lifelike-care-v2/、ambient-bgm/、background-care/、bgm-now-playing/、design-pack-integration/、health-sickness-system/、realistic-care-quality/、plant-fertilize-nutrients/、care-pace/、short-moments/、backpack-accessory-fix/、care-knowledge/、custom-pet-name/、day-texture-dual-slots/、critical-lock-health-yield/、accessory-dye-variants/。

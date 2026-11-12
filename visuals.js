@@ -79,7 +79,9 @@
     return `<img class="portrait" src="${src}" alt="" aria-hidden="true">`;
   }
 
-  function companion(type, stageIndex, worn, tier) {
+  function companion(type, stageIndex, worn, tier, tints) {
+    const tintOf = id => (tints && tints[id]) || 0;
+    const accFilter = id => tintOf(id) ? ` style="filter:hue-rotate(${[0, 30, 200][tintOf(id)]}deg)"` : '';
     const n = Math.min(3, Math.max(0, stageIndex || 0));
     const dim = (DIMS[type] || DIMS.cat)[n];
     const d = (HEIGHTS[type] || HEIGHTS.cat)[n];
@@ -109,11 +111,11 @@
         const ch = +((cy1 - cy0) * adim[1]).toFixed(1);
         const ah = +(aw * ch / cw).toFixed(1);
         const ay = +(pos.bottom ? iy + d - ah : iy + d * pos.y).toFixed(1);
-        return `<svg class="acc-worn" data-worn="${id}" x="${ax}" y="${ay}" width="${aw}" height="${ah}" viewBox="${(cx0 * adim[0]).toFixed(1)} ${(cy0 * adim[1]).toFixed(1)} ${cw} ${ch}" preserveAspectRatio="xMidYMid meet"><image href="assets/acc/${id.slice(4)}.png" x="0" y="0" width="${adim[0]}" height="${adim[1]}"/></svg>`;
+        return `<svg class="acc-worn" data-worn="${id}"${accFilter(id)} x="${ax}" y="${ay}" width="${aw}" height="${ah}" viewBox="${(cx0 * adim[0]).toFixed(1)} ${(cy0 * adim[1]).toFixed(1)} ${cw} ${ch}" preserveAspectRatio="xMidYMid meet"><image href="assets/acc/${id.slice(4)}.png" x="0" y="0" width="${adim[0]}" height="${adim[1]}"/></svg>`;
       }
       const ah = +(aw * adim[1] / adim[0]).toFixed(1);
       const ay = +(pos.bottom ? iy + d - ah : iy + d * pos.y).toFixed(1);
-      return `<image class="acc-worn" data-worn="${id}" href="assets/acc/${id.slice(4)}.png" x="${ax}" y="${ay}" width="${aw}" height="${ah}" preserveAspectRatio="xMidYMid meet"/>`;
+      return `<image class="acc-worn" data-worn="${id}"${accFilter(id)} href="assets/acc/${id.slice(4)}.png" x="${ax}" y="${ay}" width="${aw}" height="${ah}" preserveAspectRatio="xMidYMid meet"/>`;
     };
     const potAcc = hasPot ? drawAcc(potId, true) : '';
     const placeAcc = single ? '' : (slots.place && slots.place !== potId ? drawAcc(slots.place, false) : '');
@@ -139,7 +141,7 @@
     </g>`;
   }
 
-  function scene(type, stageIndex, worn, tier) {
+  function scene(type, stageIndex, worn, tier, tints) {
     const engine = window.GameEngine;
     const name = (engine && engine.profiles[type] && engine.profiles[type].name) || '';
     const labels = {
@@ -155,7 +157,7 @@
     return `<svg viewBox="0 0 620 362" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${name}在自己的小天地里等待你的照顾">
       <rect width="620" height="362" fill="${backdrops[type] || backdrops.cat}"/>
       <image class="room-bg" data-bg="${type}" href="assets/bg-${type}.jpg" width="620" height="362" preserveAspectRatio="xMidYMid slice"/>
-      ${companion(type, stageIndex, worn, tier)}
+      ${companion(type, stageIndex, worn, tier, tints)}
       ${hearts()}
       ${badge}
       <title>${labels[type] || labels.cat}</title>
