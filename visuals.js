@@ -47,14 +47,14 @@
   const POT_ACC = { plant: 'acc-plant-1' };
   const WEAR_POS = {
     baby: {
-      'acc-baby-1': { x: .5, y: .02, w: .46 },
-      'acc-baby-2': { x: .5, y: .56, w: .46 },
+      'acc-baby-1': { x: .5, y: -.08, w: .46 },
+      'acc-baby-2': { x: .5, y: .3, w: .4 },
       'acc-baby-3': { x: .5, y: .96, w: .42, bottom: true },
-      'acc-baby-4': { x: 1.24, y: .72, w: .28 }
+      'acc-baby-4': { x: 1.24, y: .72, w: .28, bottom: true }
     },
     cat: {
       'acc-cat-1': { x: .5, y: .30, w: .54, stages: { 2: { x: .309, y: .407, w: .285 }, 3: { x: .336, y: .277, w: .746 } } },
-      'acc-cat-2': { x: .59, y: .55, w: .42, stages: { 0: { x: .5, y: .39, w: .46 }, 2: { x: .2, y: .29, w: .5 }, 3: { x: .225, y: .173, w: .533 } } },
+      'acc-cat-2': { x: .59, y: .55, w: .42, stages: { 0: { x: .5, y: .39, w: .46 }, 2: { x: .2, y: .29, w: .5 }, 3: { x: .225, y: .3, w: .533 } } },
       'acc-cat-3': { x: 1.26, y: .76, w: .30 },
       'acc-cat-4': { x: -.16, y: .70, w: .28 }
     },
@@ -68,7 +68,7 @@
       'acc-plant-1': { x: .5, w: .76, bottom: true },
       'acc-plant-2': { x: 1.32, y: .66, w: .40 },
       'acc-plant-3': { x: 1.10, y: .56, w: .22 },
-      'acc-plant-4': { x: -.18, y: .64, w: .24 }
+      'acc-plant-4': { x: -.18, w: .24, bottom: true }
     }
   };
   const BASE_Y = 316;
