@@ -49,3 +49,13 @@ Entries discovered by the Agent during task execution should follow this format:
   - Playwright: `require('/usr/local/lib/node_modules/@playwright/test')`, `channel:'chromium'`, `headless`, `--no-sandbox`, `process.exit`; scripts under `/tmp/opencode`.
   - Preview server: port 8000, `python3 -m http.server 8000 --directory /workspace`.
   - Full regression: `node --test engine.test.cjs visuals.test.cjs audio.test.cjs` then `node browser.test.cjs`.
+
+[Visual QA loop for scene rendering]
+- Date: 2026-11-12
+- Context: Discovered by Agent while calibrating accessory wear positions across all 16 accessories and stages.
+- Category: Testing Methods
+- Instructions:
+  - Seed state per shot via a FRESH page per state: `addInitScript` writing localStorage then `goto`; reusing one page across states leaves the app on the first state.
+  - Force growth stage via `s.xp = 9999; s.born = NOW - 365*86400000` then `G.load(...)`; stage 0 needs xp 0 and fresh born.
+  - Screenshot `#room-art` and read the PNG with the Read tool to judge placement; engine `G.stage(state).index` gates the stage, direct `state.stageIndex` edits are ignored.
+  - Place-slot props need `bottom: true` or per-stage y tuning, else they float above the floor.
