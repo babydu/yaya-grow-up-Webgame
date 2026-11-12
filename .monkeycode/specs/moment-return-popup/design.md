@@ -52,6 +52,6 @@ flowchart TD
 
 ## References
 
-[^1]: (game.js#369) — `pulseMoment` 的隐藏顺延分支，回归路径复 用同一函数
+[^1]: (game.js#369) — `pulseMoment` 的隐藏顺延分支，回归路径复用同一函数
 [^2]: (engine.js#747) — `startMoment` 到期判定与冷却排程
 [^3]: (.monkeycode/specs/short-moments/requirements.md) — 短时小事件既有规格

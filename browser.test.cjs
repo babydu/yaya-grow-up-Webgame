@@ -283,6 +283,8 @@ const assert = require('node:assert/strict');
     await page.evaluate(() => { state.momentDueAt = Date.now() - 1000; momentQuietUntil = 0; document.dispatchEvent(new Event('visibilitychange')); });
     await page.locator('#moment-card').waitFor({ state: 'visible', timeout: 2000 });
     assert.match(await page.locator('#moment-card').innerText(), /嗝|球|噩梦/);
+    await page.locator('#moment-hit').click();
+    assert.equal(await page.locator('#moment-card').isVisible(), false);
     for (const width of [375, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
