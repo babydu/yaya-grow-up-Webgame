@@ -718,7 +718,7 @@ document.addEventListener('change',async e=>{
 });
 $('care-dialog').addEventListener('close',()=>{pause();careId=null;render();});
 $('adopt-dialog').addEventListener('cancel',e=>e.preventDefault());
-document.addEventListener('visibilitychange',()=>{if(document.hidden){if(!running||!state.task||!backgroundCare[state.task.actionId])pause();}else{render();updateTimer();}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){if(!running||!state.task||!backgroundCare[state.task.actionId])pause();}else{render();updateTimer();pulseMoment();}});
 window.addEventListener('pagehide',pause);
 // Another tab owns the newest save; pause this tab before adopting its state.
 window.addEventListener('storage',e=>{

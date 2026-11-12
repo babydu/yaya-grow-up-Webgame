@@ -280,6 +280,9 @@ const assert = require('node:assert/strict');
     });
     assert.ok(Math.abs(momentHit.bond - (momentHit.before + 2)) < 0.01);
     assert.match(momentHit.log, /亲密度 \+2/);
+    await page.evaluate(() => { state.momentDueAt = Date.now() - 1000; momentQuietUntil = 0; document.dispatchEvent(new Event('visibilitychange')); });
+    await page.locator('#moment-card').waitFor({ state: 'visible', timeout: 2000 });
+    assert.match(await page.locator('#moment-card').innerText(), /嗝|球|噩梦/);
     for (const width of [375, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
