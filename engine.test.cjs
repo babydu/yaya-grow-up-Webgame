@@ -791,7 +791,7 @@ test('natural recovery above 20 clears the critical window', () => {
 });
 
 test('departure after the window, per-type narrative and full reset via restart', () => {
-  const flavor = { baby: /家人.*远方/, cat: /夜色.*远行/, dog: /田野.*远行/, plant: /枯萎.*春泥/ };
+  const flavor = { baby: /家人.*远方/, cat: /夜色.*远行/, dog: /夜色.*田野/, plant: /枯萎.*春泥/ };
   for (const [type, pattern] of Object.entries(flavor)) {
     const s = pet(type);
     s.needs = [0, 0, 0, 0];
@@ -1137,13 +1137,16 @@ test('critical care lock, medicine gating and health-scaled yields', () => {
   s.criticalAt = NOW;
   for (const action of ['food', 'clean', 'mood', 'energy']) {
     const pid = action === 'food' ? foodId : null;
-    assert.match(G.begin(s, action, pid, NOW), /病危了，先用回春灵药挽回/);
+    assert.match(G.begin(s, action, pid, NOW), /病危了，先用安心药箱或回春灵药挽回/);
   }
   assert.equal(s.task, null);
-  assert.equal(G.buy(s, 'medicine-kit', NOW), '橘汐病危了，先用回春灵药挽回');
-  s.inventory['medicine-kit'] = 1;
-  assert.match(G.remedy(s, 'medicine-kit', NOW), /病危了，安心药箱帮不上忙/);
-  assert.equal(s.inventory['medicine-kit'], 1);
+  assert.equal(G.buy(s, 'medicine-kit', NOW), null);
+  assert.equal(G.remedy(s, 'medicine-kit', NOW), null);
+  assert.equal(s.criticalAt, null);
+  assert.equal(s.health, 40);
+  s.health = 0;
+  s.criticalAt = NOW;
+  s.points = 60;
   assert.equal(G.buy(s, 'revive-elixir', NOW), null);
   assert.equal(G.remedy(s, 'revive-elixir', NOW), null);
   assert.equal(s.criticalAt, null);
@@ -1184,6 +1187,24 @@ test('critical care lock, medicine gating and health-scaled yields', () => {
   assert.equal(done.title, '照护完成');
   assert.ok(Math.abs(c.needs[0] - (critBase + 45 * 0.55)) < 1e-9);
   assert.equal(c.criticalAt, NOW);
+});
+
+test('departed pets reject both medicines with a gentle hint', () => {
+  const s = pet();
+  s.status = 'left';
+  s.criticalAt = NOW - 2 * DAY;
+  s.leftAt = NOW - DAY;
+  s.inventory['medicine-kit'] = 1;
+  s.inventory['revive-elixir'] = 1;
+  assert.match(G.buy(s, 'medicine-kit', NOW), /已经离开/);
+  assert.match(G.buy(s, 'revive-elixir', NOW), /已经离开/);
+  assert.match(G.remedy(s, 'medicine-kit', NOW), /已经离开/);
+  assert.match(G.remedy(s, 'revive-elixir', NOW), /已经离开/);
+  assert.equal(s.health, 100);
+  assert.equal(s.inventory['medicine-kit'], 1);
+  assert.equal(s.inventory['revive-elixir'], 1);
+  const kitLog = s.logs.at(-1);
+  assert.ok(s.logs.every(l => !l.text.includes('恢复到')));
 });
 
 // Accessory dye variants: three tints persist in state, variant 0 clears, guards reject misuse.

@@ -258,7 +258,7 @@ const assert = require('node:assert/strict');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('#room-art .memorial').waitFor({ state: 'visible' });
     assert.equal(await page.evaluate(() => state.status), 'left');
-    assert.match(await page.locator('#room-art .memorial').innerText(), /离开了/);
+    assert.match(await page.locator('#room-art .memorial').innerText(), /再见了/);
     assert.match(await page.locator('#room-art .memorial').innerText(), /相伴 \d+ 天/);
     await page.locator('#restart-button').click();
     await page.locator('#adopt-dialog').waitFor({ state: 'visible' });

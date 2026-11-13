@@ -136,7 +136,13 @@ function memorial(p) {
   const days = Math.max(1, Math.floor((state.leftAt - state.born) / 86400000) + 1);
   const finalStage = G.milestones(state)[state.stageIndex].title;
   const recent = [...state.logs].slice(-5).reverse();
-  return `<div class="memorial"><span class="eyebrow">UNTIL WE MEET AGAIN</span><h2>${escapeHtml(petName())}离开了</h2><p class="memorial-summary">相伴 ${days} 天 · ${finalStage} · 亲密度 ${Math.round(state.bond)}</p><div class="memorial-logs">${recent.map(l=>`<p>${escapeHtml(l.text)}</p>`).join('')}</div><button class="primary" id="restart-button">开始新的陪伴</button><small>谢谢你这段时间的照顾。新的朋友也在等待一个温柔的家。</small></div>`;
+  const blessings = {
+    baby: '愿它在远方的日子里，一直记得被你抱在怀里的温度。',
+    cat: '愿它的旅途总有阳光和屋檐，累了的时候，还记得回家的路。',
+    dog: '愿它的原野永远开阔，跑累了回头看，爱它的心一直都在。',
+    plant: '它把最美的一季开给了你，来年的春风里，会有温柔的重逢。'
+  };
+  return `<div class="memorial"><span class="eyebrow">UNTIL WE MEET AGAIN</span><h2>再见了，${escapeHtml(petName())}</h2><p class="memorial-summary">相伴 ${days} 天 · ${finalStage} · 亲密度 ${Math.round(state.bond)}</p><p class="memorial-bless">${blessings[state.selected] || ''}</p><div class="memorial-logs">${recent.map(l=>`<p>${escapeHtml(l.text)}</p>`).join('')}</div><button class="primary" id="restart-button">开始新的陪伴</button><small>谢谢你陪它走过这一程。爱不会被辜负，新的朋友也正在等待一个温柔的家。</small></div>`;
 }
 function render() {
   if (!state.adopted) return;
@@ -166,10 +172,13 @@ function render() {
   if (tier === 'critical') {
     const windowed = state.criticalAt !== null;
     const hours = windowed ? Math.max(1, Math.ceil(G.criticalRemaining(state, now()))) : 0;
-    const owned = (state.inventory['revive-elixir'] || 0) > 0;
-    const reason = windowed ? `健康度已经耗尽，约 ${hours} 小时后会悄悄离开。${owned ? '回春灵药就在小屋里，现在就用。' : '回春灵药也许还来得及。'}` : `健康度已经很低，再不照顾就有离开的风险。${owned ? '回春灵药就在小屋里，现在就用。' : '回春灵药可以让它立刻好起来。'}`;
+    const elixirOwned = (state.inventory['revive-elixir'] || 0) > 0;
+    const kitOwned = (state.inventory['medicine-kit'] || 0) > 0;
+    const hint = elixirOwned ? '回春灵药就在小屋里，现在就用。' : kitOwned ? '安心药箱就在小屋里，现在就用。' : '小铺里的安心药箱或回春灵药都来得及。';
+    const reason = windowed ? `健康度已经耗尽，约 ${hours} 小时后会悄悄离开。${hint}` : `健康度已经很低，再不照顾就有离开的风险。${hint}`;
+    const reviveLabel = elixirOwned ? '使用回春灵药' : kitOwned ? '使用安心药箱' : '购买并使用（60 积分）';
     $('critical-banner').hidden = false;
-    $('critical-banner').innerHTML = `<div class="critical-copy"><strong>${escapeHtml(petName())}病危了</strong><p>${reason}</p></div><button class="primary" id="revive-button">${owned ? '使用回春灵药' : '购买并使用（60 积分）'}</button>`;
+    $('critical-banner').innerHTML = `<div class="critical-copy"><strong>${escapeHtml(petName())}病危了</strong><p>${reason}</p></div><button class="primary" id="revive-button">${reviveLabel}</button>`;
   } else $('critical-banner').hidden = true;
   const part = dayPart();
   const texture = DAY_TEXTURE[part];
@@ -198,16 +207,17 @@ function render() {
   $('pet-mood').textContent = tier === 'left' ? '已经离开了' : state.task ? `等你继续${state.task.name}` : uneasy ? '需要你的照顾' : state.needs[low] < 40 ? lowMood[low] : '安心地享受你的陪伴';
   $('pet-touch').innerHTML = icon('hand') + (state.selected === 'baby' ? '抱抱宝宝' : state.selected === 'plant' ? '碰碰叶子' : '摸摸它');
   $('pet-touch').style.pointerEvents = (liveMoment && !liveMoment.done) || Date.now() < momentQuietUntil ? 'none' : '';
+  $('pet-touch').hidden = tier === 'left';
   $('bond-card').innerHTML = `<span class="bond-icon">${icon('heart')}</span><div><strong>${['开始熟悉你','已经很依赖你','你是最安心的存在'][state.bond>=65?2:state.bond>=30?1:0]}</strong><p>${emotion()}</p></div><div class="bond-score"><b>${Math.round(state.bond)}</b> / 100<small>亲密度</small></div>`;
   renderToolbox();
   $('care-cards').innerHTML = actions.map((a,i) => {
     const task = state.task?.actionId === a.id;
     const due = now() >= a.dueAt;
     const satisfied = state.needs[i] >= (i === 0 ? 80 : 95);
-    const unavailable = !task && (!!state.task || !due || satisfied);
+    const unavailable = !task && (!!state.task || !due || satisfied || state.status === 'left');
     const supplies = G.products(state,a.id);
     const stock = supplies.reduce((sum,p) => sum+(state.inventory[p.id] || 0),0);
-    const status = task ? '进度已保留' : satisfied ? '状态很好，稍后再来' : timeUntil(a.dueAt);
+    const status = state.status === 'left' ? '它已经离开了' : task ? '进度已保留' : satisfied ? '状态很好，稍后再来' : timeUntil(a.dueAt);
     const stockLine = supplies.length ? `适龄物资 ${stock} 份` : '用陪伴回应需要';
     return `<article class="care-card ${!unavailable && state.needs[i]<50?'urgent':''}"><div class="care-card-top"><span class="care-icon">${icon(a.icon)}</span><span class="duration">${icon('clock')}${duration(a.seconds)}</span></div><h3>${a.name}</h3><p class="care-frequency">每 ${a.intervalHours} 小时关注一次</p><div class="care-stock">${stockLine}</div><small class="care-due">${status}</small><button class="care-action" data-care="${a.id}" ${unavailable?'disabled':''}>${task?'继续照护':satisfied?'安心休息':!due?'稍后再来':a.name}${icon('arrow')}</button></article>`;
   }).join('');
@@ -226,9 +236,9 @@ function renderToolbox() {
   el.hidden = false;
   const rows = meds.map(item => {
     const count = state.inventory[item.id] || 0;
-    const ok = item.id === 'medicine-kit' ? (state.health < 70 && state.criticalAt === null) : (state.health < 70 || !!state.criticalAt);
+    const ok = state.health < 70 || state.criticalAt !== null;
     const iconBox = `<span class="product-icon">${icon(item.icon)}</span>`;
-    const info = `<div class="toolbox-info"><strong>${item.name}</strong><p>${item.description}</p><small>${item.id === 'medicine-kit' ? '恢复 40 健康度' : '恢复 60 健康度 · 病危时也可使用'}</small></div>`;
+    const info = `<div class="toolbox-info"><strong>${item.name}</strong><p>${item.description}</p><small>${item.id === 'medicine-kit' ? '恢复 40 健康度 · 病危时也可使用' : '恢复 60 健康度 · 病危时的更强选择'}</small></div>`;
     const action = count > 0
       ? `<button data-toolbox="${item.id}" ${ok ? '' : 'disabled'}>${ok ? (count > 1 ? `使用 · 共 ${count} 份` : '使用') : '暂不需要'}</button>`
       : `<button data-page="supplies" data-shop-filter="medical">${item.price} 积分 · 去小铺兑换</button>`;
@@ -265,10 +275,10 @@ function renderSecondary() {
         const place=item.category==='accessory'&&G.accessorySlot(item.id)==='place';
         const tag=equipped?(place?'摆放中':'穿戴中'):'';
         const dots=item.category==='accessory'?`<span class="dye-dots" role="group" aria-label="饰物染色">${[0,1,2].map(v=>`<button class="dye-dot${(state.tints[item.id]||0)===v?' active':''}" data-dye="${item.id}" data-variant="${v}" title="染成${['本色','暖调','冷调'][v]}" style="filter:hue-rotate(${[0,30,200][v]}deg)"></button>`).join('')}</span>`:'';
-        const info=`<div class="pack-info"><strong>${item.name}${tag?' <span class="worn-tag">'+tag+'</span>':''}</strong><p>${item.description}</p><small>${item.category==='accessory'?(equipped?(place?'摆放中 · 收起后回到背包':'佩戴中 · 脱下后回到背包'):(place?'收在背包 · 可随时放下':'收在背包 · 可随时穿上')):item.category==='medical'?`剩余 ${count} 份 · ${item.id==='medicine-kit'?'恢复 40 健康度':'恢复 60 健康度'}`:`剩余 ${count} 份 · ${gainHint(item)||'照护时消耗'}`}</small></div>`;
+        const info=`<div class="pack-info"><strong>${item.name}${tag?' <span class="worn-tag">'+tag+'</span>':''}</strong><p>${item.description}</p><small>${item.category==='accessory'?(equipped?(place?'摆放中 · 收起后回到背包':'佩戴中 · 脱下后回到背包'):(place?'收在背包 · 可随时放下':'收在背包 · 可随时穿上')):item.category==='medical'?`剩余 ${count} 份 · ${item.id==='medicine-kit'?'恢复 40 健康度 · 病危时也可使用':'恢复 60 健康度 · 病危时的更强选择'}`:`剩余 ${count} 份 · ${gainHint(item)||'照护时消耗'}`}</small></div>`;
         let action='';
         if(item.category==='medical'){
-          const ok=item.id==='medicine-kit'?(state.health<70&&!state.criticalAt):(state.health<70||!!state.criticalAt);
+          const ok=state.health<70||!!state.criticalAt;
           action=`<button data-toolbox="${item.id}" ${ok?'':'disabled'}>${ok?(count>1?`使用 · 共 ${count} 份`:'使用'):'暂不需要'}</button>`;
         } else if(item.category==='accessory'){
           const stageOk=st.index>=item.minStage;
@@ -619,7 +629,7 @@ document.addEventListener('click',e=>{
   if(b.dataset.dye!==undefined)execute(()=>G.dye(state,b.dataset.dye,Number(b.dataset.variant),now()),'染好了，房间里的搭配已经更新。');
   if(b.dataset.remedy)execute(()=>G.remedy(state,b.dataset.remedy,now()),'用上了，健康度正在回来，好好休息。');
   if(b.dataset.toolbox)execute(()=>G.remedy(state,b.dataset.toolbox,now()),'用上了，健康度正在回来，好好休息。');
-  if(b.id==='revive-button')execute(()=>{if(!((state.inventory['revive-elixir']||0)>0)){const err=G.buy(state,'revive-elixir',now());if(err)return err;}return G.remedy(state,'revive-elixir',now());},`${profile().name}慢慢缓了过来。身体在恢复，心里的距离还要慢慢陪回来。`);
+  if(b.id==='revive-button')execute(()=>{if((state.inventory['revive-elixir']||0)>0)return G.remedy(state,'revive-elixir',now());if((state.inventory['medicine-kit']||0)>0)return G.remedy(state,'medicine-kit',now());const err=G.buy(state,'revive-elixir',now());if(err)return err;return G.remedy(state,'revive-elixir',now());},`${profile().name}慢慢缓了过来。身体在恢复，心里的距离还要慢慢陪回来。`);
   if(b.id==='restart-button') {
     try{G.restart(state,now());save();}catch{toast('还不能开始新的陪伴。');return;}
     delete $('room-art').dataset.sceneKey;$('room-art').innerHTML='';$('critical-banner').hidden=true;

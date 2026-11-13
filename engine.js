@@ -159,7 +159,7 @@
   product('plant-toy', '植物陪伴小风铃', 'heart', 'comfort', ['plant'], 0, 12, 3,
     [0, 0, 45, 0], '晒太阳时挂在盆边，叮咚作响陪它度过一段时光。');
   product('medicine-kit', '安心药箱', 'heart', 'medical', ['baby', 'cat', 'dog', 'plant'], 0, 25, 1,
-    [0, 0, 0, 0], '健康度低于 70 时使用，立即恢复 40 点健康度。');
+    [0, 0, 0, 0], '健康度偏低或病危时使用，立即恢复 40 点健康度。');
   product('revive-elixir', '回春灵药', 'spark', 'medical', ['baby', 'cat', 'dog', 'plant'], 0, 60, 1,
     [0, 0, 0, 0], '虚弱或病危时使用，立即恢复 60 点健康度，效果比药箱更强。');
   const accessoryFlavor = {
@@ -413,7 +413,7 @@
         s.criticalAt = now;
         const hurt = s.bond > 0;
         if (hurt) s.bond = Math.max(0, s.bond - 8);
-        log(s, now, `${petName(s)}的健康度耗尽了，进入病危状态。24 小时内用回春灵药还能挽回。${hurt ? '亲密度也受到了伤害。' : ''}`);
+        log(s, now, `${petName(s)}的健康度耗尽了，进入病危状态。24 小时内用安心药箱或回春灵药还能挽回。${hurt ? '亲密度也受到了伤害。' : ''}`);
       }
       if (s.criticalAt !== null && s.health >= 20) {
         s.criticalAt = null;
@@ -430,10 +430,10 @@
     return s;
   }
   const departures = {
-    baby: '被家人接到远方照顾，临走前朝你挥了挥手。',
-    cat: '趁着夜色跳出院墙，出门远行了。',
-    dog: '趁着夜色跑向田野，出门远行了。',
-    plant: '花朵枯萎，化作春泥，把这一季的陪伴留在了土里。'
+    baby: '被家人接去远方生活了。临走前它朝你挥了挥手，把这段日子里小小的温暖都装进了行囊。',
+    cat: '趁着夜色跳出院墙，独自出门远行了。它回头望了一眼小屋，把你们相伴的时光都记在了心里。',
+    dog: '趁着夜色跑向了远方的田野。它摇着尾巴告别，把被爱着的每一天都跑成了风。',
+    plant: '花朵安静地枯萎，化作春泥，把这一季的陪伴都留在了土里，等来年春风再起。'
   };
   function criticalRemaining(s, now) {
     if (!s.adopted || s.status !== 'alive' || s.criticalAt === null) return null;
@@ -524,7 +524,7 @@
     if (!ids.includes(actionId)) return '照护动作无效';
     const pid = productId === undefined ? null : productId;
     if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
-    if (s.criticalAt !== null) return `${profiles[s.selected].name}病危了，先用回春灵药挽回`;
+    if (s.criticalAt !== null) return `${profiles[s.selected].name}病危了，先用安心药箱或回春灵药挽回`;
     if (s.task) return s.task.actionId === actionId && s.task.productId === pid ? null : '请先完成当前任务';
     if (s.health < 20 && actionId === 'mood') return '太虚弱了，先照顾好身体';
     const units = quantity === undefined ? 1 : quantity;
@@ -611,8 +611,7 @@
     const p = catalog.find(item => item.id === id);
     if (!p || !available(s, p)) return '商品无效或不适龄';
     if (id === 'medicine-kit') {
-      if (s.criticalAt !== null) return `${profiles[s.selected].name}病危了，先用回春灵药挽回`;
-      if (s.health >= 70) return `${profiles[s.selected].name}很健康，暂不需要药箱`;
+      if (s.health >= 70 && s.criticalAt === null) return `${profiles[s.selected].name}很健康，暂不需要药箱`;
     }
     if (s.points < p.price) return '积分不足';
     if ((s.inventory[id] || 0) > LIMIT - p.pack) return '库存已达上限';
@@ -685,11 +684,12 @@
     if (!p) return '商品无效';
     if (!(s.inventory[id] > 0)) return '库存不足，请先在生活小铺兑换';
     if (id === 'medicine-kit') {
-      if (s.criticalAt !== null) return `${profiles[s.selected].name}病危了，安心药箱帮不上忙，用回春灵药吧`;
-      if (s.health >= 70) return `${profiles[s.selected].name}很健康，暂不需要药箱`;
+      if (s.criticalAt === null && s.health >= 70) return `${profiles[s.selected].name}很健康，暂不需要药箱`;
+      const fromCritical = s.criticalAt !== null;
       s.inventory[id]--;
       s.health = Math.min(100, s.health + 40);
-      log(s, now, `使用了${p.name}，${petName(s)}的健康度恢复到 ${Math.round(s.health)}。`);
+      s.criticalAt = null;
+      log(s, now, `使用了${p.name}，${petName(s)}的健康度恢复到 ${Math.round(s.health)}。${fromCritical ? '身体在恢复，心里的距离还要慢慢陪回来。' : ''}`);
       return null;
     }
     if (id === 'revive-elixir') {
