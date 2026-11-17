@@ -703,6 +703,41 @@
     }
     return '商品无效';
   }
+  function nanny(s, now) {
+    const cared = [];
+    let blocked = null;
+    refresh(s, now);
+    if (!s.adopted || s.status !== 'alive' || s.criticalAt !== null || s.task) return { cared, blocked };
+    const paidActions = s.selected === 'plant' ? ['energy', 'clean'] : ['food', 'clean'];
+    for (let pass = 0; pass < 4; pass++) {
+      const options = careOptions(s);
+      const option = options.find((a, i) => s.needs[i] < (a.id === 'food' ? 80 : 95)
+        && now >= a.dueAt);
+      if (!option) break;
+      const pidCandidates = products(s, option.id);
+      let pid = null;
+      if (paidActions.includes(option.id)) {
+        if (!pidCandidates.length) { blocked = '缺少适用的物资，管家先歇一歇'; break; }
+        const pick = pidCandidates.find(p => (s.inventory[p.id] || 0) >= 2)
+          || pidCandidates.find(p => (s.inventory[p.id] || 0) >= 1)
+          || pidCandidates[0];
+        if ((s.inventory[pick.id] || 0) < 2) {
+          const cost = pick.price * 2;
+          if (s.points < cost) { blocked = '积分不足，管家暂时无法补货'; break; }
+          s.points -= cost;
+          s.inventory[pick.id] = (s.inventory[pick.id] || 0) + pick.pack;
+          log(s, now, `贴心管家按双倍价格代购了${pick.name}。`);
+          pid = pick.id;
+        } else pid = pick.id;
+      }
+      const err = begin(s, option.id, pid, now);
+      if (err) { blocked = err; break; }
+      if (pid !== null) s.inventory[pid] -= 1;
+      const result = advance(s, s.task.seconds, now);
+      cared.push({ name: option.name, message: result ? result.message : '' });
+    }
+    return { cared, blocked };
+  }
   function restart(s, now) {
     clock(s, now);
     assert(s.status === 'left', '角色还没有离开');
@@ -823,6 +858,6 @@
   }
   return Object.freeze({ profiles, catalog, create, adopt, load, stage, refresh, careOptions,
     products, begin, advance, checkin, buy, wear, relief, touch, milestones,
-    remedy, restart, healthTier, configureNight, configurePace, criticalRemaining, petName,
+    remedy, restart, healthTier, configureNight, configurePace, criticalRemaining, petName, nanny,
     accessorySlot, isEquipped, careQuantityCap, dye, DYE, moments, scheduleMoment, startMoment, resolveMoment });
 });

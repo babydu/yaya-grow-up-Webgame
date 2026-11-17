@@ -285,6 +285,25 @@ const assert = require('node:assert/strict');
     assert.match(await page.locator('#moment-card').innerText(), /嗝|球|噩梦/);
     await page.locator('#moment-hit').click();
     assert.equal(await page.locator('#moment-card').isVisible(), false);
+    await page.locator('aside [data-page="settings"]').click();
+    await page.locator('#nanny-enabled').check();
+    assert.equal(await page.evaluate(() => localStorage.getItem('slow-growing-nanny')), '1');
+    await page.locator('nav [data-page="home"]').click();
+    assert.match(await page.locator('#nanny-chip').innerText(), /管家托管中/);
+    const nannyRun = await page.evaluate(() => {
+      state.needs = [40, 100, 100, 100];
+      state.lastCare = {};
+      const id = Object.keys(state.inventory).find(key => key.includes('milk'));
+      const before = state.inventory[id];
+      runNanny();
+      return { delta: before - state.inventory[id], need: state.needs[0], task: state.task };
+    });
+    assert.equal(nannyRun.delta, 2);
+    assert.ok(nannyRun.need > 40);
+    assert.equal(nannyRun.task, null);
+    await page.locator('#nanny-chip').click();
+    assert.equal(await page.evaluate(() => localStorage.getItem('slow-growing-nanny')), '0');
+    assert.equal(await page.locator('#nanny-chip').isVisible(), false);
     for (const width of [375, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

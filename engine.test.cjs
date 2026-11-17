@@ -1189,6 +1189,77 @@ test('critical care lock, medicine gating and health-scaled yields', () => {
   assert.equal(c.criticalAt, NOW);
 });
 
+test('nanny cares for all due actions at double consumption', () => {
+  const s = pet();
+  s.inventory['cat-milk'] = 2;
+  const r = G.nanny(s, NOW);
+  assert.equal(r.cared.length, 4);
+  assert.equal(s.inventory['cat-milk'], 0);
+  assert.equal(s.inventory['cat-clean'], 3);
+  assert.ok(s.needs[0] >= 80);
+  assert.ok(s.needs[1] >= 95);
+  assert.ok(s.needs[2] >= 95);
+  assert.ok(s.needs[3] >= 95);
+  assert.equal(s.task, null);
+});
+
+test('nanny restocks at double price and blocks without points', () => {
+  const s = pet();
+  s.needs = [40, 100, 100, 100];
+  s.inventory['cat-milk'] = 0;
+  s.points = 60;
+  const r = G.nanny(s, NOW);
+  assert.equal(r.cared.length, 1);
+  assert.equal(s.inventory['cat-milk'], 3);
+  assert.equal(s.points, 45);
+  assert.ok(s.logs.some(l => l.text.includes('贴心管家按双倍价格代购了')));
+
+  const t = pet();
+  t.needs = [40, 100, 100, 100];
+  t.inventory['cat-milk'] = 0;
+  t.points = 5;
+  const r2 = G.nanny(t, NOW);
+  assert.equal(r2.cared.length, 0);
+  assert.ok(r2.blocked);
+  assert.equal(t.points, 5);
+  assert.equal(t.inventory['cat-milk'], 0);
+});
+
+test('nanny trigger thresholds and guards', () => {
+  const s = pet();
+  s.needs = [20, 100, 100, 100];
+  s.lastCare = { food: NOW };
+  s.inventory['cat-milk'] = 2;
+  assert.equal(G.nanny(s, NOW).cared.length, 0);
+  s.lastCare.food = NOW - 60000;
+  assert.equal(G.nanny(s, NOW).cared.length, 1);
+  assert.equal(s.needs[0], 65);
+
+  const t = pet();
+  t.needs = [40, 100, 100, 100];
+  t.lastCare = { food: NOW };
+  t.inventory['cat-milk'] = 2;
+  assert.equal(G.nanny(t, NOW).cared.length, 0);
+  assert.equal(t.inventory['cat-milk'], 2);
+
+  const u = pet();
+  u.needs = [20, 100, 100, 100];
+  u.lastCare = { food: NOW };
+  u.inventory['cat-milk'] = 2;
+  u.criticalAt = NOW;
+  assert.equal(G.nanny(u, NOW).cared.length, 0);
+
+  const w = pet();
+  w.needs = [100, 100, 20, 100];
+  w.lastCare = { mood: NOW - 60000 };
+  const before = JSON.stringify(w.inventory);
+  const pointsBefore = w.points;
+  const r3 = G.nanny(w, NOW);
+  assert.equal(r3.cared.length, 1);
+  assert.equal(JSON.stringify(w.inventory), before);
+  assert.equal(w.points, pointsBefore + 5);
+});
+
 test('departed pets reject both medicines with a gentle hint', () => {
   const s = pet();
   s.status = 'left';

@@ -121,3 +121,5 @@
 .dye-dots{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}
 .dye-dot{width:14px;height:14px;border-radius:50%;background:#718365;border:1px solid #e4d7c4;padding:0;flex:none;cursor:pointer}
 .dye-dot.active{outline:2px solid #5b8a4e;outline-offset:1px}
+.nanny-chip{border:1px dashed #d5c9a4;background:#f7f1de;color:#8a7a55;cursor:pointer}
+.nanny-chip:hover{background:#f1e8d2}
