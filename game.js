@@ -215,8 +215,10 @@ function render() {
       : '健康度见底时只有回春灵药（+60）能挽回，快去小铺兑换。';
     const reason = windowed ? `健康度已经耗尽，约 ${hours} 小时后会悄悄离开。${hint}` : `健康度已经很低，再不照顾就有离开的风险。${hint}`;
     const reviveLabel = elixirOwned ? '使用回春灵药（+60）' : kitUsable ? '使用安心药箱（+40）' : '购买并使用回春灵药（60 积分）';
+    const vig = G.vigilStatus(state);
+    const vigilBtn = vig.available ? `<button class="secondary" type="button" id="vigil-button">守夜求援（约 ${Math.round(vig.seconds/60)} 分钟）</button>` : '';
     $('critical-banner').hidden = false;
-    $('critical-banner').innerHTML = `<div class="critical-copy"><strong>${escapeHtml(petName())}病危了</strong><p>${reason}</p></div><button class="primary" id="revive-button">${reviveLabel}</button>`;
+    $('critical-banner').innerHTML = `<div class="critical-copy"><strong>${escapeHtml(petName())}病危了</strong><p>${reason}</p></div><div class="critical-actions"><button class="primary" id="revive-button">${reviveLabel}</button>${vigilBtn}</div>`;
   } else $('critical-banner').hidden = true;
   const part = dayPart();
   const texture = DAY_TEXTURE[part];
@@ -296,8 +298,18 @@ function render() {
   $('total-minutes').innerHTML = `${Math.floor(state.daily.seconds/60)} <small>分钟</small>`;
   $('total-care').innerHTML = `${state.daily.count} <small>次</small>`;
   $('total-days').innerHTML = `${Math.floor((now()-state.born)/86400000)+1} <small>天</small>`;
+  renderTasks();
   if (page !== 'home') renderSecondary();
   updateTabCue();
+}
+function renderTasks() {
+  const el = $('task-card');
+  if (!el) return;
+  if (!state.adopted || state.status === 'left') { el.hidden = true; return; }
+  const tasks = G.dailyTasks(state);
+  const done = tasks.filter(t => t.done).length;
+  el.hidden = false;
+  el.innerHTML = `<div class="section-heading"><h2>今日小任务 <span>陪它做点小事，攒点积分</span></h2><span class="task-progress">${done} / ${tasks.length}</span></div><div class="task-list">${tasks.map(t => `<div class="task-row ${t.done ? 'done' : ''}">${icon(t.done ? 'check' : 'clock')}<span class="task-label">${escapeHtml(t.label)}</span><b class="task-reward">+${t.reward}</b></div>`).join('')}</div>`;
 }
 // Feed the live urgency to the dynamic favicon: colour by need level, a count
 // badge for pending care, and a title hint shown while the tab is unwatched.
@@ -487,6 +499,7 @@ function finishMoment(outcome, notice) {
   momentQuietUntil=Date.now()+2000;
   try {
     G.resolveMoment(state,now(),outcome,Math.random());
+    if(outcome==='hit')G.completeDailyTask(state,'moment',now());
     clearMomentCard();
     save();
     render();
@@ -665,6 +678,47 @@ function runNanny() {
     render();
   }
 }
+let vigilRunning=false, vigilEnd=0, vigilDur=150000, vigilId=null;
+function fmtClock(ms){const t=Math.max(0,Math.ceil(ms/1000));return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;}
+function openVigil(){
+  const st=G.vigilStatus(state);
+  if(!st.available){toast(st.reason||'现在不需要守夜');return;}
+  vigilDur=st.seconds*1000; vigilRunning=false; vigilEnd=0;
+  if(vigilId){clearInterval(vigilId);vigilId=null;}
+  $('vigil-icon').innerHTML=icon('moon');
+  $('vigil-desc').textContent=`${G.petName(state)}病危了，还差一点积分买回春灵药。安静地陪它守一夜，天亮就能凑齐。`;
+  $('vigil-timer').textContent=fmtClock(vigilDur);
+  $('vigil-progress').style.width='0%';
+  $('vigil-toggle').textContent='开始守夜';
+  $('vigil-toggle').disabled=false;
+  if(!$('vigil-dialog').open)$('vigil-dialog').showModal();
+}
+function vigilTick(){
+  if(!vigilRunning)return;
+  const remain=vigilEnd-Date.now();
+  $('vigil-timer').textContent=fmtClock(remain);
+  $('vigil-progress').style.width=`${Math.min(100,100*(1-Math.max(0,remain)/vigilDur))}%`;
+  if(remain<=0){
+    vigilRunning=false; if(vigilId){clearInterval(vigilId);vigilId=null;}
+    try{
+      const err=G.claimVigil(state,now());
+      if(err){toast(err);}
+      else{save(); if($('vigil-dialog').open)$('vigil-dialog').close(); render(); toast('守到了天亮，积分凑齐了，快去用回春灵药挽回它。');}
+    }catch{toast('守夜暂时无法记录。');}
+  }
+}
+function startVigil(){
+  if(vigilRunning)return;
+  const st=G.vigilStatus(state);
+  if(!st.available){toast(st.reason||'现在不需要守夜');return;}
+  vigilDur=st.seconds*1000;
+  vigilRunning=true; vigilEnd=Date.now()+vigilDur;
+  $('vigil-toggle').textContent='守夜中……'; $('vigil-toggle').disabled=true;
+  if(vigilId)clearInterval(vigilId);
+  vigilId=setInterval(vigilTick,250);
+  vigilTick();
+}
+function cancelVigil(){vigilRunning=false; if(vigilId){clearInterval(vigilId);vigilId=null;}}
 function toggleCare() {
   if(running){pause();return;}
   if(document.hidden)return;
@@ -700,12 +754,13 @@ function tick() {
     running=false;
     careId=null;
     A.stop();
+    const taskGain=G.completeDailyTask(state,'care',now());
     save();
     $('care-dialog').close();
     render();
     const tip=careSessionTip&&careSessionTip.cat===finishedAction?careSessionTip:nextTip(finishedAction);
     careSessionTip=null;
-    $('info-content').innerHTML=`<div class="dialog-icon">${icon('heart')}</div><div class="eyebrow">LOVE FINDS ITS WAY BACK</div><h2>你的用心，被感受到了</h2><p class="reward-emotion">${emotion()}</p><div class="reward-badges"><span>成长 +10</span><span>积分 +${result.points}</span><span>亲密度 +2</span></div>${tip?`<div class="tip-box">${tipHtml(tip,true)}</div>`:''}<p>下一次需要你时，小屋会记得提醒。现在也给自己一点休息。</p><button class="primary close-button-inline">收下这份小幸福</button>`;
+    $('info-content').innerHTML=`<div class="dialog-icon">${icon('heart')}</div><div class="eyebrow">LOVE FINDS ITS WAY BACK</div><h2>你的用心，被感受到了</h2><p class="reward-emotion">${emotion()}</p><div class="reward-badges"><span>成长 +10</span><span>积分 +${result.points}</span><span>亲密度 +2</span>${taskGain?`<span>小任务 +${taskGain}</span>`:''}</div>${tip?`<div class="tip-box">${tipHtml(tip,true)}</div>`:''}<p>下一次需要你时，小屋会记得提醒。现在也给自己一点休息。</p><button class="primary close-button-inline">收下这份小幸福</button>`;
     $('info-dialog').showModal();
   } else {
     updateTimer();
@@ -731,13 +786,15 @@ document.addEventListener('click',e=>{
   if(card){
     const id=card.dataset.ktoggle;
     if(knowledgeOpen.has(id)){knowledgeOpen.delete(id);}
-    else{knowledgeOpen.add(id);if(!knowledgeRead.includes(id)){knowledgeRead.push(id);try{localStorage.setItem('slow-growing-knowledge',JSON.stringify(knowledgeRead));}catch{}}}
+    else{knowledgeOpen.add(id);if(!knowledgeRead.includes(id)){knowledgeRead.push(id);try{localStorage.setItem('slow-growing-knowledge',JSON.stringify(knowledgeRead));}catch{}const kg=G.markKnowledgeTask(state,now());if(kg){save();toast(`今日小任务完成 · 积分 +${kg}`);}}}
     renderSecondary();
     return;
   }
   const b=e.target.closest('button');
   if(!b)return;
   if(b.id==='stage-up-close'){$('stage-up').hidden=true;return;}
+  if(b.id==='vigil-button'){openVigil();return;}
+  if(b.id==='vigil-toggle'){startVigil();return;}
   if(b.dataset.adopt){selectedType=b.dataset.adopt;renderAdoption();return;}
   if(b.id==='adopt-confirm') {
     if(loadFailed&&!confirm('原存档读取失败。开始新故事将写入新的存档，是否继续？'))return;
@@ -873,6 +930,7 @@ document.addEventListener('change',async e=>{
   }
 });
 $('care-dialog').addEventListener('close',()=>{pause();careId=null;render();});
+$('vigil-dialog').addEventListener('close',cancelVigil);
 $('adopt-dialog').addEventListener('cancel',e=>e.preventDefault());
 document.addEventListener('visibilitychange',()=>{if(document.hidden){if(!running||!state.task||!backgroundCare[state.task.actionId])pause();}else{render();updateTimer();pulseMoment();}});
 window.addEventListener('pagehide',pause);

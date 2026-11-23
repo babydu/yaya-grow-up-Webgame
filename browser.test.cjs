@@ -113,10 +113,12 @@ const assert = require('node:assert/strict');
     await page.locator('nav [data-page="supplies"]').click();
     assert.match(await page.locator('#secondary-page').innerText(), /舒适尿裤/);
     assert.match(await page.locator('#secondary-page').innerText(), /一次 洁净度 \+45/);
+    const beforeMilk = await page.evaluate(() => state.points);
     await page.locator('[data-buy="baby-milk"]').click();
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('slow-growing-v2')));
     assert.equal(saved.inventory['baby-milk'], 9);
-    assert.equal(saved.points, 61);
+    const milkPrice = await page.evaluate(() => window.GameEngine.catalog.find(p => p.id === 'baby-milk').price);
+    assert.equal(saved.points, beforeMilk - milkPrice);
     await page.locator('nav [data-page="home"]').click();
     await page.locator('#pet-touch').click();
     assert.match(await page.locator('#speech').innerText(), /手指/);
@@ -180,7 +182,7 @@ const assert = require('node:assert/strict');
       Object.defineProperty(document, 'hidden', { configurable: true, value: true });
       document.dispatchEvent(new Event('visibilitychange'));
     });
-    await page.waitForTimeout(2600);
+    await page.waitForFunction(() => document.getElementById('timer').innerText !== '02:00', null, { timeout: 8000 });
     assert.notEqual(await page.locator('#timer').innerText(), '02:00');
     assert.equal(await page.evaluate(() => window.GameAudio.active), true);
     await page.evaluate(() => {
@@ -197,10 +199,12 @@ const assert = require('node:assert/strict');
     await page.locator('nav [data-page="supplies"]').click();
     await page.locator('[data-filter="accessory"]').click();
     assert.match(await page.locator('#secondary-page').innerText(), /随身饰物/);
+    const beforeAcc = await page.evaluate(() => state.points);
     await page.locator('[data-buy="acc-baby-1"]').click();
     const afterAcc = await page.evaluate(() => JSON.parse(localStorage.getItem('slow-growing-v2')));
     assert.equal(afterAcc.inventory['acc-baby-1'], 1);
-    assert.equal(afterAcc.points, 41);
+    const accPrice = await page.evaluate(() => window.GameEngine.catalog.find(p => p.id === 'acc-baby-1').price);
+    assert.equal(afterAcc.points, beforeAcc - accPrice);
     assert.equal(await page.locator('[data-wear="acc-baby-1"]').count(), 0);
     await page.locator('[data-page="pack"].secondary, [data-page="pack"]').last().click();
     assert.match(await page.locator('#secondary-page').innerText(), /我的背包/);
@@ -386,8 +390,9 @@ const assert = require('node:assert/strict');
     const momentHit = await page.evaluate(() => {
       const before = state.bond;
       document.getElementById('moment-hit').click();
-      const last = state.logs[state.logs.length - 1] || {};
-      return { before, bond: state.bond, log: last.text || '' };
+      // A daily-task reward may follow the bond log, so scan recent entries.
+      const recent = state.logs.slice(-3).map(l => l.text).join('\n');
+      return { before, bond: state.bond, log: recent };
     });
     assert.ok(Math.abs(momentHit.bond - (momentHit.before + 2)) < 0.01);
     assert.match(momentHit.log, /亲密度 \+2/);
@@ -679,6 +684,42 @@ const assert = require('node:assert/strict');
       assert.match(await packPage.locator('#secondary-page').innerText(), /生活小铺/);
     } finally {
       await packPage.close().catch(() => {});
+    }
+    // Phase 0 economy: daily task card + the vigil safety net.
+    const ecoPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    try {
+      await ecoPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await ecoPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
+      await ecoPage.locator('[data-adopt="cat"]').click();
+      await ecoPage.locator('#adopt-confirm').click();
+      await ecoPage.waitForTimeout(300);
+      assert.equal(await ecoPage.locator('#task-card').isVisible(), true);
+      assert.equal(await ecoPage.locator('#task-card .task-row').count(), 3);
+      assert.match(await ecoPage.locator('#task-card').innerText(), /今日小任务/);
+      await ecoPage.evaluate(() => { state.needs = [30, 75, 65, 70]; delete state.lastCare.food; state.task = null; localStorage.setItem('slow-growing-v2', JSON.stringify(state)); });
+      await ecoPage.locator('#care-cards [data-care="food"]').click();
+      await ecoPage.locator('#care-toggle').click();
+      await ecoPage.evaluate(() => { state.task.elapsed = state.task.seconds - 0.4; });
+      await ecoPage.waitForFunction(() => !!document.querySelector('#task-card .task-row.done'), null, { timeout: 8000 });
+      await ecoPage.locator('.close-button-inline').click().catch(() => {});
+      const vig = await ecoPage.evaluate(() => {
+        state.points = 10; state.inventory = {}; state.health = 0; state.criticalAt = state.updated; state.task = null;
+        render();
+        const btn = document.getElementById('vigil-button');
+        return { hasBtn: !!btn, text: btn ? btn.textContent : '' };
+      });
+      assert.equal(vig.hasBtn, true);
+      assert.match(vig.text, /守夜求援/);
+      await ecoPage.locator('#vigil-button').click();
+      await ecoPage.locator('#vigil-dialog').waitFor({ state: 'visible' });
+      assert.match(await ecoPage.locator('#vigil-timer').innerText(), /^\d{2}:\d{2}$/);
+      const claimed = await ecoPage.evaluate(() => { const err = window.GameEngine.claimVigil(state, Date.now()); render(); return { err, points: state.points, hasBtn: !!document.getElementById('vigil-button') }; });
+      assert.equal(claimed.err, null);
+      assert.equal(claimed.points, 60);
+      assert.equal(claimed.hasBtn, false);
+      await ecoPage.close();
+    } finally {
+      await ecoPage.close().catch(() => {});
     }
   } finally {
       await nightPage.close().catch(() => {});

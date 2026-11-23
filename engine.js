@@ -343,13 +343,81 @@
     validate(s);
     assert(timestamp(now) && now >= s.updated, '时间无效或发生回退');
   }
+  // Daily micro-tasks: small, capped point rewards that encourage gentle daily
+  // play without rivaling sign-in or care. Each is claimable once per day.
+  const DAILY_TASKS = [
+    { key: 'care', label: '完成一次照护', reward: 4 },
+    { key: 'moment', label: '回应一次小心思', reward: 4 },
+    { key: 'knowledge', label: '读一篇养育课堂', reward: 4 }
+  ];
+  const VIGIL_SECONDS = 150;
+  function freshDaily(now) {
+    return { date: date(now), seconds: 0, count: 0, earned: 0, vigil: false,
+      tasks: { care: false, moment: false, knowledge: false } };
+  }
+  function ensureDaily(s) {
+    const d = s.daily;
+    if (!record(d)) return;
+    if (typeof d.vigil !== 'boolean') d.vigil = false;
+    if (!record(d.tasks)) d.tasks = { care: false, moment: false, knowledge: false };
+    else for (const t of DAILY_TASKS) if (typeof d.tasks[t.key] !== 'boolean') d.tasks[t.key] = false;
+  }
+  function rewardDailyTask(s, key, now) {
+    if (!s.adopted || s.status === 'left') return 0;
+    ensureDaily(s);
+    if (s.daily.tasks[key]) return 0;
+    const task = DAILY_TASKS.find(t => t.key === key);
+    if (!task) return 0;
+    s.daily.tasks[key] = true;
+    s.points = Math.min(LIMIT, s.points + task.reward);
+    // Keep the clock monotonic: log entries must never carry a later stamp than
+    // the save's updated time (callers may pass a fresh timestamp after refresh).
+    if (now > s.updated) s.updated = now;
+    log(s, now, `完成今日小任务「${task.label}」，获得 ${task.reward} 积分。`);
+    return task.reward;
+  }
+  function dailyTasks(s) {
+    ensureDaily(s);
+    return DAILY_TASKS.map(t => ({ id: t.key, label: t.label, reward: t.reward, done: !!s.daily.tasks[t.key] }));
+  }
+  function markKnowledgeTask(s, now) {
+    assert(timestamp(now), '时间无效');
+    return rewardDailyTask(s, 'knowledge', now);
+  }
+  const elixirPrice = () => (catalog.find(p => p.id === 'revive-elixir') || {}).price || 60;
+  // A last-resort safety line: when the pet is in the critical window, owns no
+  // elixir and cannot afford one, the player may spend a short vigil to top up
+  // to exactly the elixir price. Once per day, so it never replaces sign-in.
+  function vigilStatus(s) {
+    const target = elixirPrice();
+    const base = { seconds: VIGIL_SECONDS, target };
+    if (!s.adopted) return { available: false, reason: '请先确认养育对象', ...base };
+    if (s.status === 'left') return { available: false, reason: '它已经离开了', ...base };
+    if (s.criticalAt === null) return { available: false, reason: '还没到最紧急的时候', ...base };
+    if ((s.inventory['revive-elixir'] || 0) > 0) return { available: false, reason: '回春灵药就在小屋里', ...base };
+    if (s.points >= target) return { available: false, reason: '积分已经够了，去小铺兑换灵药吧', ...base };
+    ensureDaily(s);
+    if (s.daily.vigil) return { available: false, reason: '今天已经守过夜了，明天再来陪它', ...base };
+    return { available: true, reason: null, ...base };
+  }
+  function claimVigil(s, now) {
+    refresh(s, now);
+    const st = vigilStatus(s);
+    if (!st.available) return st.reason || '现在不需要守夜';
+    ensureDaily(s);
+    s.daily.vigil = true;
+    const gain = st.target - s.points;
+    s.points = st.target;
+    log(s, now, `守夜到天亮，凑齐了救命的积分（+${gain}）。`);
+    return null;
+  }
   function create(now) {
     assert(timestamp(now), '时间无效');
     return { version: 2, selected: null, adopted: false, born: now, updated: now,
       needs: [40, 75, 65, 70], xp: 0, count: 0, seconds: 0, bond: 0, points: 60,
       inventory: {}, logs: [], task: null, lastCare: {}, emotionalMilestones: [], worn: emptyWorn(), tints: {},
       health: 100, status: 'alive', criticalAt: null, leftAt: null, name: null,
-      daily: { date: date(now), seconds: 0, count: 0, earned: 0 },
+      daily: freshDaily(now),
       checkin: { date: '', streak: 0 }, reliefDate: '', stageIndex: 0, lastTouch: null,
       momentDueAt: null, momentLastId: null };
   }
@@ -433,7 +501,7 @@
         const criticalHours = (now - s.criticalAt - sinceCritical) / HOUR + (sinceCritical / HOUR) * NIGHT_RATE;
         if (criticalHours >= 24) leave(s, now);
       }    }
-    if (s.daily.date !== date(now)) s.daily = { date: date(now), seconds: 0, count: 0, earned: 0 };
+    if (s.daily.date !== date(now)) s.daily = freshDaily(now);
     rewardStages(s, now);
     rewardEmotions(s, now);
     return s;
@@ -868,6 +936,7 @@
       if (s.momentLastId === undefined) s.momentLastId = null;
       if (s.health === undefined) s.health = 100;
       if (s.tints === undefined) s.tints = {};
+      ensureDaily(s);
       if (s.status === undefined) { s.status = 'alive'; s.criticalAt = null; s.leftAt = null; }
       // Older saves kept the critical-window rescue promise after departure.
       if (s.status === 'left') {
@@ -909,6 +978,8 @@
   }
   return Object.freeze({ profiles, catalog, create, adopt, load, stage, refresh, careOptions,
     products, begin, advance, checkin, buy, wear, relief, touch, milestones, careBlock,
+    vigilStatus, claimVigil, dailyTasks, markKnowledgeTask, VIGIL_SECONDS,
+    completeDailyTask: rewardDailyTask,
     remedy, restart, healthTier, configureNight, configurePace, criticalRemaining, petName, nanny,
     accessorySlot, isEquipped, careQuantityCap, dye, DYE, STAGES,
     moments, scheduleMoment, startMoment, resolveMoment });

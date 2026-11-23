@@ -1440,3 +1440,53 @@ test('departed pets reject both medicines with a gentle hint', () => {
   assert.deepEqual(G.DYE.hues, [0, 30, 200]);
   assert.deepEqual(G.DYE.names, ['本色', '暖调', '冷调']);
 }
+
+test('daily micro-tasks reward once per day and reset on a new day', () => {
+  const s = pet();
+  const start = s.points;
+  assert.equal(G.dailyTasks(s).length, 3);
+  assert.ok(G.dailyTasks(s).every(t => t.done === false));
+  assert.equal(G.completeDailyTask(s, 'care', NOW), 4);
+  assert.equal(s.points, start + 4);
+  assert.equal(G.completeDailyTask(s, 'care', NOW), 0);
+  assert.equal(G.completeDailyTask(s, 'moment', NOW), 4);
+  assert.equal(G.markKnowledgeTask(s, NOW), 4);
+  assert.equal(G.markKnowledgeTask(s, NOW), 0);
+  assert.ok(G.dailyTasks(s).every(t => t.done === true));
+  // New day resets the task flags so they can be earned again.
+  G.refresh(s, NOW + DAY);
+  assert.ok(G.dailyTasks(s).every(t => t.done === false));
+  assert.equal(G.completeDailyTask(s, 'care', NOW + DAY), 4);
+});
+
+test('vigil safety net tops up to the elixir price only when truly stuck', () => {
+  const s = pet();
+  // Healthy: no vigil.
+  assert.equal(G.vigilStatus(s).available, false);
+  // Critical window, broke, no elixir: available.
+  s.health = 0;
+  s.criticalAt = s.updated;
+  s.points = 10;
+  s.inventory = {};
+  const v = G.vigilStatus(s);
+  assert.equal(v.available, true);
+  assert.equal(v.target, 60);
+  assert.equal(G.claimVigil(s, s.updated), null);
+  assert.equal(s.points, 60);
+  assert.equal(G.vigilStatus(s).available, false); // already used today
+  assert.equal(typeof G.claimVigil(s, s.updated), 'string');
+  // Even broke again, once-per-day blocks it.
+  s.points = 0;
+  assert.equal(G.vigilStatus(s).available, false);
+  // Owning an elixir or having enough points also disables it.
+  const t = pet();
+  t.health = 0; t.criticalAt = t.updated; t.points = 0; t.inventory = {};
+  t.inventory['revive-elixir'] = 1;
+  assert.equal(G.vigilStatus(t).available, false);
+  const u = pet();
+  u.health = 0; u.criticalAt = u.updated; u.points = 80; u.inventory = {};
+  assert.equal(G.vigilStatus(u).available, false);
+  // Not critical: unavailable.
+  const h = pet();
+  assert.equal(G.vigilStatus(h).available, false);
+});
