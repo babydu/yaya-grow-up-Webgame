@@ -58,6 +58,13 @@
   function stageName(type, index) {
     return (stageLabels[type] || stageLabels.cat)[index];
   }
+  // Read-only stage metadata so UI can render stage counts from data instead of
+  // hardcoding "4" once new age brackets are introduced.
+  const STAGES = Object.freeze({
+    count: names.length, names: Object.freeze([...names]),
+    ages: Object.freeze([...ages]), experience: Object.freeze([...experience]),
+    labels: stageLabels
+  });
   const profiles = {
     cat: { name: '橘汐', kind: '小猫', description: '陪伴小猫咪橘汐慢慢长大。',
       rhythm: '慢热柔软；偶尔打嗝、想玩球或做噩梦，10 秒内可回应。' },
@@ -73,25 +80,25 @@
   const MOMENT_WINDOW = 10000;
   const momentCatalog = {
     cat: [
-      { id: 'cat-hiccup', prompt: '{name}打了个小小的嗝。', action: '轻轻拍拍背' },
-      { id: 'cat-ball', prompt: '{name}盯着毛线球，想玩一会儿。', action: '陪它玩球' },
-      { id: 'cat-dream', prompt: '{name}睡着时忽然抖了一下，像做了噩梦。', action: '安抚一下' }
+      { id: 'cat-hiccup', prompt: '{name}打了个小小的嗝，想让你拍拍背。', action: '轻轻拍拍背', habit: 'knead' },
+      { id: 'cat-ball', prompt: '{name}盯着毛线球，想玩一会儿。', action: '陪它玩球', habit: 'pounce' },
+      { id: 'cat-dream', prompt: '{name}睡着时忽然抖了一下，像做了噩梦。', action: '安抚一下', habit: 'twitch' }
     ],
     dog: [
-      { id: 'dog-hiccup', prompt: '{name}打了个响嗝，有点不好意思。', action: '摸摸肚子' },
-      { id: 'dog-ball', prompt: '{name}把球推到你脚边，眼睛亮亮的。', action: '扔一次球' },
-      { id: 'dog-dream', prompt: '{name}睡着后腿在空中蹬了蹬，像在跑一场噩梦。', action: '轻声安慰' }
+      { id: 'dog-hiccup', prompt: '{name}打了个响嗝，有点不好意思。', action: '摸摸肚子', habit: 'wag' },
+      { id: 'dog-ball', prompt: '{name}把球推到你脚边，眼睛亮亮的。', action: '扔一次球', habit: 'spin' },
+      { id: 'dog-dream', prompt: '{name}睡着后腿在空中蹬了蹬，像在跑一场噩梦。', action: '轻声安慰', habit: 'run' }
     ],
     baby: [
-      { id: 'baby-hiccup', prompt: '{name}打嗝了，小肩膀一抖一抖。', action: '轻轻拍背' },
-      { id: 'baby-ball', prompt: '{name}伸出手，想够那个小球。', action: '递过去' },
-      { id: 'baby-dream', prompt: '{name}睡着后皱了皱眉，像做了噩梦。', action: '轻轻哄哄' }
+      { id: 'baby-hiccup', prompt: '{name}打嗝了，小肩膀一抖一抖。', action: '轻轻拍背', habit: 'clap' },
+      { id: 'baby-ball', prompt: '{name}伸出手，想够那个小球。', action: '递过去', habit: 'reach' },
+      { id: 'baby-dream', prompt: '{name}睡着后皱了皱眉，像做了噩梦。', action: '轻轻哄哄', habit: 'suck' }
     ],
     plant: []
   };
   function moments(type) {
     return (momentCatalog[type] || []).map(item => Object.freeze({
-      id: item.id, prompt: item.prompt, action: item.action
+      id: item.id, prompt: item.prompt, action: item.action, habit: item.habit || null
     }));
   }
   function unitRoll(roll) {
@@ -347,6 +354,7 @@
       momentDueAt: null, momentLastId: null };
   }
   function eligibleStage(s) {
+    if (s.status === 'left') return s.stageIndex;
     const age = Math.max(0, (s.updated - s.born) / DAY * 30);
     let index = 0;
     while (index < 3 && age >= ages[index + 1] && s.xp >= experience[index + 1]) index++;
@@ -354,7 +362,8 @@
   }
   function stage(s) {
     const index = s.selected ? eligibleStage(s) : 0;
-    const age = Math.max(0, Math.floor((s.updated - s.born) / DAY * 30));
+    const end = s.status === 'left' && s.leftAt ? s.leftAt : s.updated;
+    const age = Math.max(0, Math.floor((end - s.born) / DAY * 30));
     const next = index === 3 ? null : { index: index + 1, name: stageName(s.selected, index + 1),
       age: ages[index + 1], xp: experience[index + 1] };
     const progress = next ? Math.min(1, Math.max(0, (age - ages[index]) / (next.age - ages[index])),
@@ -369,7 +378,7 @@
     s.logs = s.logs.slice(-1000);
   }
   function rewardStages(s, now) {
-    if (!s.adopted) return;
+    if (!s.adopted || s.status === 'left') return;
     const index = eligibleStage(s);
     while (s.stageIndex < index) {
       s.stageIndex++;
@@ -379,7 +388,7 @@
   }
   function rewardEmotions(s, now) {
     if (!own(s, 'emotionalMilestones')) s.emotionalMilestones = [];
-    if (!s.adopted) return;
+    if (!s.adopted || s.status === 'left') return;
     for (const threshold of [30, 65]) {
       if (s.bond < threshold || s.emotionalMilestones.includes(threshold)) continue;
       s.emotionalMilestones.push(threshold);
@@ -413,7 +422,7 @@
         s.criticalAt = now;
         const hurt = s.bond > 0;
         if (hurt) s.bond = Math.max(0, s.bond - 8);
-        log(s, now, `${petName(s)}的健康度耗尽了，进入病危状态。24 小时内用安心药箱或回春灵药还能挽回。${hurt ? '亲密度也受到了伤害。' : ''}`);
+        log(s, now, `${petName(s)}的健康度耗尽了，进入病危状态。24 小时内用安心药箱或回春灵药${CRITICAL_HINT}。${hurt ? '亲密度也受到了伤害。' : ''}`);
       }
       if (s.criticalAt !== null && s.health >= 20) {
         s.criticalAt = null;
@@ -433,8 +442,11 @@
     baby: '被家人接去远方生活了。临走前它朝你挥了挥手，把这段日子里小小的温暖都装进了行囊。',
     cat: '趁着夜色跳出院墙，独自出门远行了。它回头望了一眼小屋，把你们相伴的时光都记在了心里。',
     dog: '趁着夜色跑向了远方的田野。它摇着尾巴告别，把被爱着的每一天都跑成了风。',
-    plant: '花朵安静地枯萎，化作春泥，把这一季的陪伴都留在了土里，等来年春风再起。'
+    plant: '的花朵安静地枯萎，化作春泥，把这一季的陪伴都留在了土里，等来年春风再起。'
   };
+  // Wording shared by the live critical log and the departed-state cleanup so a
+  // rescue promise never survives into the memorial panel.
+  const CRITICAL_HINT = '还能挽回';
   function criticalRemaining(s, now) {
     if (!s.adopted || s.status !== 'alive' || s.criticalAt === null) return null;
     const sinceCritical = nightSpanMs(s.criticalAt, now);
@@ -442,6 +454,14 @@
     return Math.max(0, 24 - used);
   }
   function leave(s, now) {
+    rewardStages(s, now);
+    // The critical-window log promises a rescue that is now impossible; rewrite
+    // it as a past-tense memory before writing the departure entry.
+    for (const entry of s.logs) {
+      if (entry.text.includes(CRITICAL_HINT)) {
+        entry.text = `${petName(s)}的健康度耗尽了，最终没能等到挽回。`;
+      }
+    }
     s.status = 'left';
     s.leftAt = now;
     s.task = null;
@@ -457,6 +477,12 @@
   }
   function petName(s) {
     return s.name || profiles[s.selected].name;
+  }
+  function departedCopy(s) {
+    const name = petName(s);
+    return s.selected === 'plant'
+      ? `${name}的这一季已经结束，开始新的陪伴吧`
+      : `${name}已经离开，开始新的陪伴吧`;
   }
   function adopt(s, type, now, name) {
     clock(s, now);
@@ -518,15 +544,20 @@
           : ['适量喂养，饱腹达到 80 时暂停喂养。', '保持干净舒适。', '专注陪伴。', '安心休息。'])[i] };
     });
   }
+  function careBlock(s, actionId) {
+    if (s.status === 'left') return departedCopy(s);
+    if (s.criticalAt !== null) return `${petName(s)}病危了，先用安心药箱或回春灵药挽回`;
+    if (s.health < 20 && actionId === 'mood') return `${petName(s)}太虚弱了，先照顾好身体`;
+    return null;
+  }
   function begin(s, actionId, productId, now, quantity) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
     if (!ids.includes(actionId)) return '照护动作无效';
     const pid = productId === undefined ? null : productId;
-    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
-    if (s.criticalAt !== null) return `${profiles[s.selected].name}病危了，先用安心药箱或回春灵药挽回`;
+    const block = careBlock(s, actionId);
+    if (block) return block;
     if (s.task) return s.task.actionId === actionId && s.task.productId === pid ? null : '请先完成当前任务';
-    if (s.health < 20 && actionId === 'mood') return '太虚弱了，先照顾好身体';
     const units = quantity === undefined ? 1 : quantity;
     if (!Number.isInteger(units) || units < 1) return '物资数量无效';
     if (pid === null && units !== 1) return '这种照护无需选择数量';
@@ -592,7 +623,7 @@
   function checkin(s, now) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
-    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
+    if (s.status === 'left') return departedCopy(s);
     const today = date(now);
     if (s.checkin.date === today) return null;
     const yesterday = new Date(now);
@@ -607,7 +638,7 @@
   function buy(s, id, now) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
-    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
+    if (s.status === 'left') return departedCopy(s);
     const p = catalog.find(item => item.id === id);
     if (!p || !available(s, p)) return '商品无效或不适龄';
     if (id === 'medicine-kit') {
@@ -623,7 +654,7 @@
   function wear(s, id, now) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
-    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
+    if (s.status === 'left') return departedCopy(s);
     const slots = normalizeWorn(s);
     if (id === null) {
       if (slots.wear || slots.place) log(s, now, `收起了饰物。`);
@@ -648,7 +679,7 @@
   function dye(s, id, variant, now) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
-    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
+    if (s.status === 'left') return departedCopy(s);
     const p = catalog.find(item => item.id === id);
     if (!p || p.category !== 'accessory') return '染色方案不适用于这件商品';
     if (!(s.inventory[id] > 0)) return '请先在生活小铺兑换这件饰物';
@@ -659,7 +690,7 @@
   function relief(s, now) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
-    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
+    if (s.status === 'left') return departedCopy(s);
     if (s.reliefDate === date(now)) return '今日已领取基础补给';
     let supplied = false;
     const supplyActions = s.selected === 'plant' ? ['energy', 'clean'] : ['food', 'clean'];
@@ -679,9 +710,16 @@
   function remedy(s, id, now) {
     refresh(s, now);
     if (!s.adopted) return '请先确认养育对象';
-    if (s.status === 'left') return `${profiles[s.selected].name}已经离开，开始新的陪伴吧`;
+    if (s.status === 'left') return departedCopy(s);
     const p = catalog.find(item => item.id === id && item.category === 'medical');
     if (!p) return '商品无效';
+    // A kit only tops up 40; once health has actually reached zero, only the
+    // stronger elixir can bring the pet back. Decay can leave a tiny positive
+    // residue right after the window opens, so treat anything under one point
+    // as "empty". Check this before stock so the message names the real blocker.
+    if (id === 'medicine-kit' && s.health < 1) {
+      return `${profiles[s.selected].name}的健康度已经见底，药箱回天乏力，快用回春灵药`;
+    }
     if (!(s.inventory[id] > 0)) return '库存不足，请先在生活小铺兑换';
     if (id === 'medicine-kit') {
       if (s.criticalAt === null && s.health >= 70) return `${profiles[s.selected].name}很健康，暂不需要药箱`;
@@ -724,6 +762,7 @@
         if ((s.inventory[pick.id] || 0) < 2) {
           const cost = pick.price * 2;
           if (s.points < cost) { blocked = '积分不足，管家暂时无法补货'; break; }
+          if ((s.inventory[pick.id] || 0) > LIMIT - pick.pack) { blocked = '物资库存已达上限，管家先歇一歇'; break; }
           s.points -= cost;
           s.inventory[pick.id] = (s.inventory[pick.id] || 0) + pick.pack;
           log(s, now, `贴心管家按双倍价格代购了${pick.name}。`);
@@ -747,7 +786,7 @@
   function touch(s, now) {
     refresh(s, now);
     if (!s.adopted) return { message: '请先确认养育对象', rewarded: false };
-    if (s.status === 'left') return { message: `${profiles[s.selected].name}已经离开了，开始新的陪伴吧`, rewarded: false };
+    if (s.status === 'left') return { message: departedCopy(s), rewarded: false };
     if (s.health < 20) return { message: `${profiles[s.selected].name}太虚弱了，先照顾好身体`, rewarded: false };
     const rewarded = s.lastTouch === null || now - s.lastTouch >= 60000;
     if (rewarded) {
@@ -786,7 +825,7 @@
     const pick = (choices.length ? choices : pool)[Math.floor(roll * (choices.length ? choices.length : pool.length))];
     s.momentLastId = pick.id;
     s.momentDueAt = now + MOMENT_MIN;
-    return { id: pick.id, prompt: pick.prompt.replace(/\{name\}/g, petName(s)), action: pick.action, until: now + MOMENT_WINDOW };
+    return { id: pick.id, prompt: pick.prompt.replace(/\{name\}/g, petName(s)), action: pick.action, habit: pick.habit || null, until: now + MOMENT_WINDOW };
   }
   function resolveMoment(s, now, outcome, roll) {
     refresh(s, now);
@@ -820,6 +859,8 @@
     if (rawV2 !== null && rawV2 !== undefined) {
       const raw = parse(rawV2);
       validate(raw);
+      // A device clock moved backwards must not invalidate an intact save.
+      if (now < raw.updated) now = raw.updated;
       const s = JSON.parse(JSON.stringify(raw));
       normalizeWorn(s);
       if (s.name === undefined) s.name = null;
@@ -828,6 +869,14 @@
       if (s.health === undefined) s.health = 100;
       if (s.tints === undefined) s.tints = {};
       if (s.status === undefined) { s.status = 'alive'; s.criticalAt = null; s.leftAt = null; }
+      // Older saves kept the critical-window rescue promise after departure.
+      if (s.status === 'left') {
+        for (const entry of s.logs) {
+          if (entry.text.includes(CRITICAL_HINT)) {
+            entry.text = `${petName(s)}的健康度耗尽了，最终没能等到挽回。`;
+          }
+        }
+      }
       if (s.adopted && s.status === 'alive' && s.selected !== 'plant' && s.momentDueAt === null)
         s.momentDueAt = now + MOMENT_MIN;
       return refresh(s, now);
@@ -837,6 +886,8 @@
     assert(own(profiles, old.selected) && record(old.pets) && own(old.pets, old.selected));
     const p = old.pets[old.selected];
     assert(record(p) && timestamp(p.born) && timestamp(p.updated));
+    // Clock rollback on a legacy save must not turn into a corrupt-save prompt.
+    if (now < p.updated) now = p.updated;
     assert(integer(p.leaves) && Array.isArray(p.progress) && Array.isArray(p.items));
     const s = Object.assign(create(p.updated), { selected: old.selected, born: p.born,
       needs: p.needs, xp: p.xp, count: p.count, seconds: p.seconds, points: p.leaves,
@@ -857,7 +908,8 @@
     return refresh(JSON.parse(JSON.stringify(s)), now);
   }
   return Object.freeze({ profiles, catalog, create, adopt, load, stage, refresh, careOptions,
-    products, begin, advance, checkin, buy, wear, relief, touch, milestones,
+    products, begin, advance, checkin, buy, wear, relief, touch, milestones, careBlock,
     remedy, restart, healthTier, configureNight, configurePace, criticalRemaining, petName, nanny,
-    accessorySlot, isEquipped, careQuantityCap, dye, DYE, moments, scheduleMoment, startMoment, resolveMoment });
+    accessorySlot, isEquipped, careQuantityCap, dye, DYE, STAGES,
+    moments, scheduleMoment, startMoment, resolveMoment });
 });

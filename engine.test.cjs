@@ -37,6 +37,13 @@ test('CommonJS and native window exports, immutable definitions, isolated states
   assert.equal(G.stage(b).index, 0);
   assert.equal(Object.keys(G.profiles).length, 4);
   assert.ok(Object.isFrozen(G.catalog[0].gain));
+  assert.equal(G.STAGES.count, 4);
+  assert.deepEqual([...G.STAGES.ages], [0, 30, 180, 360]);
+  assert.deepEqual([...G.STAGES.experience], [0, 100, 300, 600]);
+  assert.ok(Object.isFrozen(G.STAGES.ages) && Object.isFrozen(G.STAGES.names));
+  for (const type of Object.keys(G.STAGES.labels)) {
+    assert.equal(G.STAGES.labels[type].length, G.STAGES.count);
+  }
   for (const p of G.catalog) {
     for (const k of ['id', 'name', 'icon', 'category', 'types', 'minStage', 'price', 'pack', 'description', 'gain']) {
       assert.ok(Object.hasOwn(p, k));
@@ -323,6 +330,18 @@ test('load clones input, prioritizes v2, rejects corrupt v2 without silent fallb
   assert.throws(() => G.load('{', legacy(), NOW));
   assert.throws(() => G.load('', null, NOW));
   assert.deepEqual(G.load(null, null, NOW), G.create(NOW));
+});
+
+test('clock rollback loads an intact save instead of reporting corruption', () => {
+  const s = pet();
+  const saved = JSON.stringify(s);
+  const back = G.load(saved, null, NOW - HOUR);
+  assert.equal(back.selected, 'cat');
+  assert.equal(back.updated, NOW);
+  const old = legacy();
+  const migrated = G.load(null, old, NOW - HOUR);
+  assert.equal(migrated.selected, 'dog');
+  assert.equal(migrated.updated, old.pets.dog.updated);
 });
 
 test('strict corrupt-save and numeric boundary rejection', () => {
@@ -707,6 +726,44 @@ test('medicine kit heals with purchase gate and stock handling', () => {
   assert.equal(G.remedy(s, 'revive-elixir', s.updated), '橘汐状态还好，灵药先收好');
 });
 
+test('a spent kit cannot revive at zero health; only the elixir can', () => {
+  const s = pet();
+  s.health = 0;
+  s.criticalAt = NOW - HOUR;
+  s.inventory['medicine-kit'] = 1;
+  s.inventory['revive-elixir'] = 1;
+  const blocked = G.remedy(s, 'medicine-kit', NOW);
+  assert.match(blocked, /回春灵药/);
+  assert.equal(s.health, 0);
+  assert.equal(s.inventory['medicine-kit'], 1);
+  assert.equal(s.criticalAt, NOW - HOUR);
+  // Stock check must not mask the real reason.
+  const noStock = pet();
+  noStock.health = 0;
+  noStock.criticalAt = NOW - HOUR;
+  assert.match(G.remedy(noStock, 'medicine-kit', NOW), /回春灵药/);
+  // The elixir still works.
+  assert.equal(G.remedy(s, 'revive-elixir', NOW), null);
+  assert.equal(s.health, 60);
+  assert.equal(s.criticalAt, null);
+  assert.equal(s.inventory['revive-elixir'], 0);
+  // A kit is still fine while some health remains.
+  // A tiny residue below one point still counts as empty.
+  const residue = pet();
+  residue.health = 0.0001;
+  residue.criticalAt = NOW - HOUR;
+  residue.inventory['medicine-kit'] = 1;
+  assert.match(G.remedy(residue, 'medicine-kit', NOW), /回春灵药/);
+  assert.equal(residue.inventory['medicine-kit'], 1);
+  // Any real health left, even inside the critical window, allows a kit.
+  const low = pet();
+  low.health = 5;
+  low.criticalAt = NOW - HOUR;
+  low.inventory['medicine-kit'] = 1;
+  assert.equal(G.remedy(low, 'medicine-kit', NOW), null);
+  assert.equal(low.health, 45);
+});
+
 test('critical window, elixir revival and re-entry', () => {
   const s = pet();
   s.needs = [0, 0, 0, 0];
@@ -802,15 +859,24 @@ test('departure after the window, per-type narrative and full reset via restart'
     assert.equal(s.task, null);
     assert.match(s.logs.at(-1).text, pattern);
     assert.equal(G.healthTier(s), 'left');
-    assert.equal(typeof G.begin(s, 'food', type + '-milk', s.updated), 'string');
+    // The live rescue promise must not survive into the departed memorial.
+    assert.ok(!s.logs.some(l => /还能挽回/.test(l.text)), type);
+    assert.ok(s.logs.some(l => /最终没能等到挽回/.test(l.text)), type);
+    assert.match(String(G.begin(s, 'food', type + '-milk', s.updated)), type === 'plant' ? /的这一季已经结束/ : /已经离开/);
     assert.equal(G.touch(s, s.updated).rewarded, false);
     assert.equal(typeof G.checkin(s, s.updated), 'string');
     assert.equal(typeof G.buy(s, 'cat-clean', s.updated), 'string');
     assert.equal(typeof G.wear(s, null, s.updated), 'string');
     assert.equal(typeof G.relief(s, s.updated), 'string');
     assert.equal(typeof G.remedy(s, 'revive-elixir', s.updated), 'string');
+    const frozenAge = G.stage(s).age;
+    G.refresh(s, s.updated + 10 * DAY);
+    assert.equal(s.status, 'left');
+    assert.equal(G.stage(s).age, frozenAge);
     const memorial = G.load(JSON.stringify(s), null, s.updated + HOUR);
     assert.equal(memorial.status, 'left');
+    assert.equal(G.stage(memorial).age, frozenAge);
+    assert.ok(!memorial.logs.some(l => /还能挽回/.test(l.text)));
     assert.throws(() => G.restart(pet(), NOW), /离开/);
     G.restart(s, s.updated);
     assert.equal(s.selected, null);
@@ -822,6 +888,24 @@ test('departure after the window, per-type narrative and full reset via restart'
     const fresh = G.adopt(structuredClone(s), type, s.updated);
     assert.equal(fresh.stageIndex, 0);
   }
+});
+
+test('legacy departed saves get stale rescue promises rewritten on load', () => {
+  const s = pet('plant');
+  s.status = 'left';
+  s.health = 0;
+  s.criticalAt = NOW - 2 * HOUR;
+  s.leftAt = NOW - HOUR;
+  s.logs = [
+    { at: NOW - 3 * HOUR, text: '确认陪伴团子成长。' },
+    { at: NOW - 2 * HOUR, text: '团子的健康度耗尽了，进入病危状态。24 小时内用安心药箱或回春灵药还能挽回。' },
+    { at: NOW - HOUR, text: '团子的花朵安静地枯萎，化作春泥，把这一季的陪伴都留在了土里，等来年春风再起。' }
+  ];
+  const loaded = G.load(JSON.stringify(s), null, NOW);
+  assert.equal(loaded.status, 'left');
+  assert.ok(!loaded.logs.some(l => /还能挽回/.test(l.text)));
+  assert.ok(loaded.logs.some(l => /最终没能等到挽回/.test(l.text)));
+  assert.match(loaded.logs.at(-1).text, /枯萎.*春泥/);
 });
 
 test('legacy v2 saves default to healthy and reject corrupt health or status', () => {
@@ -1070,6 +1154,9 @@ test('short moments: plant stays quiet, companions get 10s prompts', () => {
     assert.ok(pool.some(m => m.id.endsWith('ball')));
     assert.ok(pool.some(m => m.id.endsWith('dream')));
     assert.match(G.profiles[type].rhythm, /10 秒/);
+    // Every companion moment carries a signature habit for its portrait.
+    assert.ok(pool.every(m => typeof m.habit === 'string' && m.habit.length > 0));
+    assert.equal(new Set(pool.map(m => m.habit)).size, 3);
   }
   const plant = pet('plant');
   assert.equal(plant.momentDueAt, null);
@@ -1080,6 +1167,7 @@ test('short moments: plant stays quiet, companions get 10s prompts', () => {
   const due = s.momentDueAt;
   const first = G.startMoment(s, due, 0);
   assert.equal(first.id, 'cat-hiccup');
+  assert.equal(first.habit, 'knead');
   assert.match(first.prompt, /橘汐/);
   assert.equal(first.until, due + 10000);
   assert.equal(s.momentDueAt, due + 10 * 60 * 1000);
@@ -1138,14 +1226,26 @@ test('critical care lock, medicine gating and health-scaled yields', () => {
   for (const action of ['food', 'clean', 'mood', 'energy']) {
     const pid = action === 'food' ? foodId : null;
     assert.match(G.begin(s, action, pid, NOW), /病危了，先用安心药箱或回春灵药挽回/);
+    // The UI uses careBlock as the single source of truth for disabling cards.
+    assert.match(G.careBlock(s, action), /病危了，先用安心药箱或回春灵药挽回/);
   }
   assert.equal(s.task, null);
-  assert.equal(G.buy(s, 'medicine-kit', NOW), null);
-  assert.equal(G.remedy(s, 'medicine-kit', NOW), null);
-  assert.equal(s.criticalAt, null);
-  assert.equal(s.health, 40);
+  // Healthy or low-but-not-critical states are not blocked by careBlock.
+  s.criticalAt = null;
+  s.health = 100;
+  for (const action of ['food', 'clean', 'mood', 'energy']) assert.equal(G.careBlock(s, action), null);
+  s.health = 15;
+  assert.equal(G.careBlock(s, 'food'), null);
+  assert.match(G.careBlock(s, 'mood'), /太虚弱了，先照顾好身体/);
+  s.status = 'left';
+  assert.match(G.careBlock(s, 'food'), /已经离开/);
+  s.status = 'alive';
+  // At zero health the kit cannot revive; buying one for later is still allowed.
   s.health = 0;
   s.criticalAt = NOW;
+  assert.equal(G.buy(s, 'medicine-kit', NOW), null);
+  assert.match(G.remedy(s, 'medicine-kit', NOW), /回春灵药/);
+  assert.equal(s.health, 0);
   s.points = 60;
   assert.equal(G.buy(s, 'revive-elixir', NOW), null);
   assert.equal(G.remedy(s, 'revive-elixir', NOW), null);
@@ -1223,6 +1323,38 @@ test('nanny restocks at double price and blocks without points', () => {
   assert.ok(r2.blocked);
   assert.equal(t.points, 5);
   assert.equal(t.inventory['cat-milk'], 0);
+
+  const single = pet();
+  single.needs = [40, 100, 100, 100];
+  single.lastCare = { food: NOW - 4 * 3600000 };
+  single.inventory['cat-milk'] = 1;
+  single.points = 1000;
+  const r3 = G.nanny(single, NOW);
+  assert.equal(r3.cared.length, 1);
+  assert.equal(single.inventory['cat-milk'], 4);
+  assert.equal(single.points, 985);
+});
+
+test('nanny matches manual care yield while consuming exactly double stock', () => {
+  const manual = pet();
+  manual.needs = [20, 100, 100, 100];
+  manual.lastCare = { food: NOW - 60000 };
+  manual.inventory['cat-milk'] = 4;
+  G.begin(manual, 'food', 'cat-milk', NOW);
+  G.advance(manual, manual.task.seconds, NOW);
+
+  const nanny = pet();
+  nanny.needs = [20, 100, 100, 100];
+  nanny.lastCare = { food: NOW - 60000 };
+  nanny.inventory['cat-milk'] = 4;
+  G.nanny(nanny, NOW);
+
+  assert.deepEqual(nanny.needs.map(Math.round), manual.needs.map(Math.round));
+  assert.equal(nanny.xp, manual.xp);
+  assert.equal(Math.round(nanny.bond), Math.round(manual.bond));
+  assert.equal(nanny.points, manual.points);
+  assert.equal(manual.inventory['cat-milk'], 3);
+  assert.equal(nanny.inventory['cat-milk'], 2);
 });
 
 test('nanny trigger thresholds and guards', () => {

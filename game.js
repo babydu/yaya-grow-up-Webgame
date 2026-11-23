@@ -16,6 +16,7 @@ const pageNames = {home:'我的小屋',growth:'成长足迹',diary:'养育日记
 let state;
 let storageFailed = false;
 let loadFailed = false;
+let lastStageIndex = null;
 let page = 'home';
 let selectedType = 'cat';
 let careId = null;
@@ -44,6 +45,7 @@ try {
   state = G.create(Date.now());
   loadFailed = true;
 }
+lastStageIndex = state.adopted ? G.stage(state).index : null;
 A.loadPref();
 let backgroundCare={food:false,clean:false,mood:false,energy:false};
 try{const rawBg=JSON.parse(localStorage.getItem('slow-growing-background')||'{}');['food','clean','mood','energy'].forEach(id=>{if(typeof rawBg[id]==='boolean')backgroundCare[id]=rawBg[id];});}catch{}
@@ -134,39 +136,68 @@ function renderAdoption() {
   const extra = selectedType === 'plant' ? '小植物是安静养成，不会弹出短时小事件。' : '陪伴中偶尔会出现 10 秒内可完成的短时小事件。';
   $('adopt-summary').textContent = state.selected === selectedType ? `继续与${profile().name}的故事，保留已有成长与照护进度。` : `${G.profiles[selectedType].description} ${extra}`;
 }
-function memorial(p) {
+function memorial() {
+  const name = escapeHtml(petName());
   const days = Math.max(1, Math.floor((state.leftAt - state.born) / 86400000) + 1);
   const finalStage = G.milestones(state)[state.stageIndex].title;
-  const recent = [...state.logs].slice(-5).reverse();
-  const blessings = {
-    baby: '愿它在远方的日子里，一直记得被你抱在怀里的温度。',
-    cat: '愿它的旅途总有阳光和屋檐，累了的时候，还记得回家的路。',
-    dog: '愿它的原野永远开阔，跑累了回头看，爱它的心一直都在。',
-    plant: '它把最美的一季开给了你，来年的春风里，会有温柔的重逢。'
+  const leftAt = new Date(state.leftAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+  const farewell = [...state.logs].reverse().find(l => l.at === state.leftAt) || state.logs.at(-1);
+  const recent = [...state.logs].filter(l => l !== farewell && !/^确认陪伴/.test(l.text)).slice(-3).reverse();
+  const titles = {
+    baby: `${name}被接到了远方`,
+    cat: `${name}出门远行了`,
+    dog: `${name}跑向了远方`,
+    plant: `这一季，${name}开过了`
   };
-  return `<div class="memorial"><span class="eyebrow">UNTIL WE MEET AGAIN</span><h2>再见了，${escapeHtml(petName())}</h2><p class="memorial-summary">相伴 ${days} 天 · ${finalStage} · 亲密度 ${Math.round(state.bond)}</p><p class="memorial-bless">${blessings[state.selected] || ''}</p><div class="memorial-logs">${recent.map(l=>`<p>${escapeHtml(l.text)}</p>`).join('')}</div><button class="primary" id="restart-button">开始新的陪伴</button><small>谢谢你陪它走过这一程。爱不会被辜负，新的朋友也正在等待一个温柔的家。</small></div>`;
+  const blessings = {
+    baby: '愿远方的日子里，一直记得被你抱在怀里的温度。',
+    cat: '愿旅途总有阳光和屋檐，累了的时候，还记得小屋的方向。',
+    dog: '愿原野永远开阔。跑累了回头看，爱它的心一直都在。',
+    plant: '最美的一季已经开过。来年春风里，会有温柔的重逢。'
+  };
+  const customTitle = titles[state.selected] || `再见了，${name}`;
+  const logs = recent.map(l => `<p>${escapeHtml(l.text)}</p>`).join('');
+  return `<div class="memorial"><span class="eyebrow">UNTIL WE MEET AGAIN</span><h2>${customTitle}</h2><ul class="memorial-facts"><li>相伴 ${days} 天</li><li>${escapeHtml(finalStage)}</li><li>亲密度 ${Math.round(state.bond)}</li><li>${leftAt}</li></ul><p class="memorial-bless">${blessings[state.selected] || ''}</p>${farewell ? `<p class="memorial-farewell">${escapeHtml(farewell.text)}</p>` : ''}${logs ? `<div class="memorial-logs">${logs}</div>` : ''}<button class="primary" id="restart-button">开始新的陪伴</button><small>谢谢你陪它走过这一程。新的朋友也正在等待一个温柔的家。</small></div>`;
+}
+function showStageUp(st) {
+  const name = petName();
+  const lines = {
+    cat: `${name}长大了一点，尾巴翘得更高，也更爱黏着你了。`,
+    dog: `${name}又长大了一些，跑起来更稳，眼里都是信任。`,
+    baby: `${name}又长大了一点，会的事更多了，也更依赖你了。`,
+    plant: `${name}抽出新的枝叶，这一季正长得很好。`
+  };
+  const el = $('stage-up');
+  el.innerHTML = `<div class="stage-up-card"><span class="stage-up-eyebrow">A LITTLE BIGGER TODAY</span><h2>${escapeHtml(name)}进入新的阶段</h2><span class="stage-up-badge">${icon('sprout')}${escapeHtml(st.name)}</span><p class="stage-up-bless">${escapeHtml(lines[state.selected] || '')}</p><button class="primary" type="button" id="stage-up-close">继续陪着它</button></div>`;
+  el.hidden = false;
 }
 function render() {
   if (!state.adopted) return;
   G.refresh(state, now());
   const p = profile(), st = G.stage(state), actions = G.careOptions(state), tier = G.healthTier(state);
-  $('welcome-back').hidden = !state.task;
-  if (state.task) $('welcome-back').innerHTML = `${icon('clock')} 上一次的${escapeHtml(state.task.name)}还在等你，进度已经保存。<button data-care="${state.task.actionId}">继续陪伴</button>`;
-  $('companion-chip').innerHTML = portrait(state.selected) + `<strong>${p.kind} · ${escapeHtml(petName())}</strong><span>${st.name}</span>`;
+  const gone = tier === 'left';
+  $('welcome-back').hidden = !state.task || gone;
+  if (state.task && !gone) $('welcome-back').innerHTML = `${icon('clock')} 上一次的${escapeHtml(state.task.name)}还在等你，进度已经保存。<button data-care="${state.task.actionId}">继续陪伴</button>`;
+  $('companion-chip').innerHTML = portrait(state.selected) + `<strong>${p.kind} · ${escapeHtml(petName())}</strong><span>${gone ? (state.selected === 'plant' ? '这一季已结束' : '已经离开') : st.name}</span>`;
   $('wallet-points').innerHTML = icon('leaf') + `<b>${state.points}</b> 积分`;
   const nannyChip=$('nanny-chip');
   if(nannyChip)nannyChip.hidden=!(nannyOn&&state.adopted&&state.status==='alive');
   const checked = state.checkin.date === state.daily.date;
-  $('checkin-button').disabled = checked;
-  $('checkin-button').textContent = checked ? `已签到 · ${state.checkin.streak} 天` : '签到领积分';
-  $('room-name').textContent = petName() + '的小窝';
+  $('checkin-button').disabled = checked || gone;
+  $('checkin-button').textContent = gone ? '这段故事已经结束' : checked ? `已签到 · ${state.checkin.streak} 天` : '签到领积分';
+  $('checkin-button').hidden = gone;
+  $('room-name').textContent = gone ? (state.selected === 'plant' ? petName() + '的这一季' : petName() + '的留念') : petName() + '的小窝';
   $('pet-name').textContent = petName();
-  $('pet-age').textContent = `${st.label} · 相伴第 ${Math.floor((now()-state.born)/86400000)+1} 天`;
-  $('stage-badge').textContent = st.name;
-  $('stage-text').textContent = st.next ? `下一站：${st.next.name}` : '成长的每一步，都有你';
+  $('pet-age').textContent = gone
+    ? `曾相伴 ${Math.max(1, Math.floor((state.leftAt - state.born) / 86400000) + 1)} 天`
+    : `${st.label} · 相伴第 ${Math.floor((now()-state.born)/86400000)+1} 天`;
+  $('stage-badge').textContent = gone ? (state.selected === 'plant' ? '这一季' : '已告别') : st.name;
+  $('stage-text').textContent = gone ? '故事已经写下' : st.next ? `下一站：${st.next.name}` : '成长的每一步，都有你';
   $('growth-percent').textContent = `${state.xp} 成长经验`;
   $('growth-bar').style.width = `${st.progress}%`;
-  $('status-tip').textContent = state.selected === 'plant'
+  $('status-tip').textContent = gone
+    ? (state.selected === 'plant' ? '这一季已经结束。小屋里留下了你们的日子。' : '它已经离开小屋。这段日子被好好地记下了。')
+    : state.selected === 'plant'
     ? `每 ${st.feedHours} 小时关注浇水 · 每次 ${duration(st.feedSeconds)}`
     : `每 ${st.feedHours} 小时关注进食 · 每次 ${duration(st.feedSeconds)}`;
   $('health-value').textContent = `${Math.round(state.health)} / 100`;
@@ -177,58 +208,121 @@ function render() {
     const windowed = state.criticalAt !== null;
     const hours = windowed ? Math.max(1, Math.ceil(G.criticalRemaining(state, now()))) : 0;
     const elixirOwned = (state.inventory['revive-elixir'] || 0) > 0;
-    const kitOwned = (state.inventory['medicine-kit'] || 0) > 0;
-    const hint = elixirOwned ? '回春灵药就在小屋里，现在就用。' : kitOwned ? '安心药箱就在小屋里，现在就用。' : '小铺里的安心药箱或回春灵药都来得及。';
+    // Health already at zero: a +40 kit cannot revive, so only the elixir counts.
+    const kitUsable = !windowed && (state.inventory['medicine-kit'] || 0) > 0;
+    const hint = elixirOwned ? '回春灵药就在小屋里，现在就用。'
+      : kitUsable ? '安心药箱就在小屋里，现在就用。'
+      : '健康度见底时只有回春灵药（+60）能挽回，快去小铺兑换。';
     const reason = windowed ? `健康度已经耗尽，约 ${hours} 小时后会悄悄离开。${hint}` : `健康度已经很低，再不照顾就有离开的风险。${hint}`;
-    const reviveLabel = elixirOwned ? '使用回春灵药' : kitOwned ? '使用安心药箱' : '购买并使用（60 积分）';
+    const reviveLabel = elixirOwned ? '使用回春灵药（+60）' : kitUsable ? '使用安心药箱（+40）' : '购买并使用回春灵药（60 积分）';
     $('critical-banner').hidden = false;
     $('critical-banner').innerHTML = `<div class="critical-copy"><strong>${escapeHtml(petName())}病危了</strong><p>${reason}</p></div><button class="primary" id="revive-button">${reviveLabel}</button>`;
   } else $('critical-banner').hidden = true;
   const part = dayPart();
   const texture = DAY_TEXTURE[part];
-  $('greeting-title').innerHTML = texture.greet + `<span class="tiny-leaf">${icon('leaf')}</span>`;
+  const greetCopy = $('greeting-copy');
+  if (gone) {
+    $('greeting-title').innerHTML = (state.selected === 'plant' ? '这一季已经开过了' : '这段陪伴，轻轻放下') + `<span class="tiny-leaf">${icon('leaf')}</span>`;
+    if (greetCopy) greetCopy.textContent = '留下一段被认真对待过的日子，再把温柔带给下一位朋友。';
+  } else {
+    $('greeting-title').innerHTML = texture.greet + `<span class="tiny-leaf">${icon('leaf')}</span>`;
+    if (greetCopy) greetCopy.textContent = '它的世界很小，小到只有你。今天也请多一点耐心。';
+  }
   $('room-weather').innerHTML = icon(texture.icon) + texture.weather;
+  const roomCard = $('room-card');
+  if (roomCard) roomCard.classList.toggle('gone', gone);
+  const statusCard = document.querySelector('.status-card');
+  if (statusCard) {
+    statusCard.classList.toggle('gone', gone);
+    statusCard.hidden = gone;
+  }
+  const homeGrid = document.querySelector('.home-grid');
+  if (homeGrid) homeGrid.classList.toggle('gone', gone);
+  const careSection = $('care-section');
+  if (careSection) careSection.hidden = gone;
+  const bottomGrid = $('bottom-grid');
+  if (bottomGrid) bottomGrid.hidden = gone;
+  $('bond-card').hidden = gone;
+  $('needs').hidden = gone;
   const worn = state.worn && typeof state.worn === 'object' ? state.worn : { wear: null, place: null };
   const tints = state.tints || {};
-  const sceneKey = tier === 'left' ? 'left:' + state.leftAt : state.selected + ':' + st.index + ':' + (worn.wear || '') + ':' + (tints[worn.wear] || 0) + ':' + (worn.place || '') + ':' + (tints[worn.place] || 0) + ':' + tier;
+  const sceneKey = tier === 'left' ? 'left:' + state.leftAt
+    : state.selected + ':' + st.index + ':' + (worn.wear || '') + ':' + (tints[worn.wear] || 0) + ':' + (worn.place || '') + ':' + (tints[worn.place] || 0) + ':' + tier;
   if ($('room-art').dataset.sceneKey !== sceneKey) {
     $('room-art').dataset.sceneKey = sceneKey;
-    $('room-art').innerHTML = tier === 'left' ? memorial(p) : scene(state.selected, st.index, state.worn, tier, tints);
+    $('room-art').innerHTML = gone ? memorial() : scene(state.selected, st.index, state.worn, tier, tints);
   }
   $('room-art').dataset.day = part;
+  if (!$('stage-up').hidden && (gone || !state.adopted)) $('stage-up').hidden = true;
+  if (state.adopted && !gone) {
+    if (lastStageIndex === null) lastStageIndex = st.index;
+    else if (st.index > lastStageIndex) { lastStageIndex = st.index; showStageUp(st); }
+  }
   const labels = actions.map(a => a.need);
   $('needs').innerHTML = state.needs.map((value,i) => `<div class="need ${actions[i].id}"><div class="need-top">${icon(actions[i].icon)}<span>${labels[i]}</span><span class="need-value">${Math.round(value)} / 100</span></div><div class="progress" role="progressbar" aria-label="${labels[i]}" aria-valuenow="${Math.round(value)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${value}%"></span></div></div>`).join('');
   const low = state.needs.indexOf(Math.min(...state.needs));
   const uneasy = tier === 'sick' || tier === 'critical';
-  $('speech').hidden = tier === 'left';
+  $('speech').hidden = gone;
   const lowTalk = state.selected === 'plant'
     ? ['叶子有点渴了……','叶面该擦一擦了……','想晒晒太阳……','土里的养分不够了……']
     : ['肚子有点饿，你来啦？','想要干干净净的……','今天可以多陪陪我吗？','困了，陪我休息一会儿吧。'];
   const lowMood = state.selected === 'plant'
     ? ['到了浇水的时间','叶子该擦一擦','想晒晒太阳','该施肥了']
     : ['到了进食的时间','需要清洁一下','想要你的陪伴','需要安静休息'];
-  if (Date.now() > responseUntil) $('speech').textContent = tier === 'left' ? '' : uneasy ? ['身体软软的，没有力气玩……','有点不舒服，想要你多陪陪我……','会乖乖的，很快就会好起来。'][state.health % 3] : state.needs[low] < 40 ? lowTalk[low] : texture.speech;
-  $('pet-mood').textContent = tier === 'left' ? '已经离开了' : state.task ? `等你继续${state.task.name}` : uneasy ? '需要你的照顾' : state.needs[low] < 40 ? lowMood[low] : '安心地享受你的陪伴';
+  if (Date.now() > responseUntil) $('speech').textContent = gone ? '' : uneasy ? ['身体软软的，没有力气玩……','有点不舒服，想要你多陪陪我……','会乖乖的，很快就会好起来。'][Math.floor(state.health) % 3] : state.needs[low] < 40 ? lowTalk[low] : texture.speech;
+  $('speech').hidden = gone || !$('speech').textContent;
+  $('pet-mood').textContent = gone ? (state.selected === 'plant' ? '这一季已经结束' : '已经离开小屋') : state.task ? `等你继续${state.task.name}` : uneasy ? '需要你的照顾' : state.needs[low] < 40 ? lowMood[low] : '安心地享受你的陪伴';
   $('pet-touch').innerHTML = icon('hand') + (state.selected === 'baby' ? '抱抱宝宝' : state.selected === 'plant' ? '碰碰叶子' : '摸摸它');
   $('pet-touch').style.pointerEvents = (liveMoment && !liveMoment.done) || Date.now() < momentQuietUntil ? 'none' : '';
-  $('pet-touch').hidden = tier === 'left';
+  $('pet-touch').hidden = gone;
+  const roomBottom = document.querySelector('.room-bottom');
+  if (roomBottom) roomBottom.hidden = gone;
   $('bond-card').innerHTML = `<span class="bond-icon">${icon('heart')}</span><div><strong>${['开始熟悉你','已经很依赖你','你是最安心的存在'][state.bond>=65?2:state.bond>=30?1:0]}</strong><p>${emotion()}</p></div><div class="bond-score"><b>${Math.round(state.bond)}</b> / 100<small>亲密度</small></div>`;
   renderToolbox();
   $('care-cards').innerHTML = actions.map((a,i) => {
     const task = state.task?.actionId === a.id;
     const due = now() >= a.dueAt;
     const satisfied = state.needs[i] >= (i === 0 ? 80 : 95);
-    const unavailable = !task && (!!state.task || !due || satisfied || state.status === 'left');
+    const blockReason = gone ? null : G.careBlock(state, a.id);
+    const blocked = !task && !!blockReason;
+    const unavailable = !task && (!!blockReason || !!state.task || !due || satisfied || state.status === 'left');
     const supplies = G.products(state,a.id);
     const stock = supplies.reduce((sum,p) => sum+(state.inventory[p.id] || 0),0);
-    const status = state.status === 'left' ? '它已经离开了' : task ? '进度已保留' : satisfied ? '状态很好，稍后再来' : timeUntil(a.dueAt);
+    const status = gone ? (state.selected === 'plant' ? '这一季已经结束' : '已经离开小屋') : task ? '进度已保留' : blocked ? blockReason : satisfied ? '状态很好，稍后再来' : timeUntil(a.dueAt);
     const stockLine = supplies.length ? `适龄物资 ${stock} 份` : '用陪伴回应需要';
-    return `<article class="care-card ${!unavailable && state.needs[i]<50?'urgent':''}"><div class="care-card-top"><span class="care-icon">${icon(a.icon)}</span><span class="duration">${icon('clock')}${duration(a.seconds)}</span></div><h3>${a.name}</h3><p class="care-frequency">每 ${a.intervalHours} 小时关注一次</p><div class="care-stock">${stockLine}</div><small class="care-due">${status}</small><button class="care-action" data-care="${a.id}" ${unavailable?'disabled':''}>${task?'继续照护':satisfied?'安心休息':!due?'稍后再来':a.name}${icon('arrow')}</button></article>`;
+    const label = task ? '继续照护' : blocked ? (state.criticalAt !== null ? '病危中，先用药' : '先照顾身体') : satisfied ? '安心休息' : !due ? '稍后再来' : a.name;
+    return `<article class="care-card ${blocked?'blocked ':''}${!unavailable && state.needs[i]<50?'urgent':''}"><div class="care-card-top"><span class="care-icon">${icon(a.icon)}</span><span class="duration">${icon('clock')}${duration(a.seconds)}</span></div><h3>${a.name}</h3><p class="care-frequency">每 ${a.intervalHours} 小时关注一次</p><div class="care-stock">${stockLine}</div><small class="care-due">${status}</small><button class="care-action" data-care="${a.id}" ${unavailable?'disabled':''}>${label}${icon('arrow')}</button></article>`;
   }).join('');
   $('total-minutes').innerHTML = `${Math.floor(state.daily.seconds/60)} <small>分钟</small>`;
   $('total-care').innerHTML = `${state.daily.count} <small>次</small>`;
   $('total-days').innerHTML = `${Math.floor((now()-state.born)/86400000)+1} <small>天</small>`;
   if (page !== 'home') renderSecondary();
+  updateTabCue();
+}
+// Feed the live urgency to the dynamic favicon: colour by need level, a count
+// badge for pending care, and a title hint shown while the tab is unwatched.
+function tabCueInfo() {
+  if (!state.adopted || state.status === 'left') return { level: 'ok', count: 0, hint: '它在等你' };
+  const name = petName();
+  const options = G.careOptions(state);
+  let due = 0;
+  for (let i = 0; i < options.length; i += 1) {
+    const a = options[i];
+    if (state.needs[i] >= (i === 0 ? 80 : 95)) continue;
+    if (now() < a.dueAt) continue;
+    if (G.careBlock(state, a.id)) continue;
+    due += 1;
+  }
+  const momentWaiting = !!(liveMoment && !liveMoment.done);
+  let level = 'ok', hint = '它在等你';
+  if (state.criticalAt !== null) { level = 'critical'; hint = `${name}病危了`; }
+  else if (G.healthTier(state) === 'critical') { level = 'critical'; hint = `${name}很虚弱`; }
+  else if (momentWaiting) { level = 'need'; hint = `${name}在等你回应`; }
+  else if (due > 0) { level = 'need'; hint = `该照顾${name}了`; }
+  return { level, count: due + (momentWaiting ? 1 : 0), hint };
+}
+function updateTabCue() {
+  if (window.TabCue) window.TabCue.set(tabCueInfo());
 }
 function renderToolbox() {
   const el = $('toolbox-card');
@@ -240,11 +334,16 @@ function renderToolbox() {
   el.hidden = false;
   const rows = meds.map(item => {
     const count = state.inventory[item.id] || 0;
-    const ok = state.health < 70 || state.criticalAt !== null;
+    const kitSpent = item.id === 'medicine-kit' && state.health < 1;
+    const ok = !kitSpent && (state.health < 70 || state.criticalAt !== null);
     const iconBox = `<span class="product-icon">${icon(item.icon)}</span>`;
-    const info = `<div class="toolbox-info"><strong>${item.name}</strong><p>${item.description}</p><small>${item.id === 'medicine-kit' ? '恢复 40 健康度 · 病危时也可使用' : '恢复 60 健康度 · 病危时的更强选择'}</small></div>`;
+    const note = item.id === 'medicine-kit'
+      ? (kitSpent ? '健康度已见底，药箱回天乏力' : '恢复 40 健康度 · 病危时也可使用')
+      : '恢复 60 健康度 · 病危时的更强选择';
+    const info = `<div class="toolbox-info"><strong>${item.name}</strong><p>${item.description}</p><small>${note}</small></div>`;
+    const label = kitSpent ? '改用回春灵药' : ok ? (count > 1 ? `使用 · 共 ${count} 份` : '使用') : '暂不需要';
     const action = count > 0
-      ? `<button data-toolbox="${item.id}" ${ok ? '' : 'disabled'}>${ok ? (count > 1 ? `使用 · 共 ${count} 份` : '使用') : '暂不需要'}</button>`
+      ? `<button data-toolbox="${item.id}" ${ok ? '' : 'disabled'}>${label}</button>`
       : `<button data-page="supplies" data-shop-filter="medical">${item.price} 积分 · 去小铺兑换</button>`;
     return `<div class="toolbox-item">${iconBox}${info}${action}</div>`;
   }).join('');
@@ -262,9 +361,22 @@ function renderSecondary() {
     const times=state.selected==='plant'
       ?`浇水 ${duration(st.feedSeconds)}；晒太阳 1 分钟；施肥 2 分钟。`
       :`进食 ${duration(st.feedSeconds)}；玩耍 1 分钟；安抚休息 2 分钟。`;
-    el.innerHTML=`<div class="page-panel"><div class="eyebrow">LITTLE STEPS, BIG LOVE</div><h2>${escapeHtml(petName())}的成长手册</h2><p>${st.description}<br>目前 ${st.label}，${state.xp} 点成长经验。${st.next?`下一阶段需要游戏年龄 ${st.next.age} 天与 ${st.next.xp} 经验。`:'成长还在继续，爱会留在每一天。'}${['sick','critical'].includes(G.healthTier(state))?'<br><b>生病的日子成长会慢一些，先照顾好身体。</b>':''}</p><div class="milestones">${G.milestones(state).map(m=>{const i=Number(m.id.slice(6));return `<article class="milestone ${m.unlocked?'current':''}"><img class="stage-thumb" src="assets/stages/${state.selected}-${i+1}.png" alt="${m.title}立绘">${icon(m.unlocked?'sprout':'clock')}<h3>${m.title}</h3><p>${m.description}</p><small>${m.unlocked?'已留下足迹':'慢慢到达 · 晋级 +20 积分'}</small></article>`;}).join('')}</div><h3>这个阶段，怎样好好照顾？</h3><div class="stage-guide"><p><b>${feedTitle}</b><br>${feedNames}</p><p><b>多久一次</b><br>${rhythm}</p><p><b>陪伴的时间</b><br>${times}</p></div><h3>双向奔赴的小瞬间</h3>    <div class="memory-cards">${[30,65].map((n,i)=>{const kept=(state.emotionalMilestones||[]).includes(n);return `<article class="milestone ${kept?'current':''}">${icon('heart')}<h3>${i?'你是它的全世界':'开始认出你'}</h3><p>亲密度 ${n} 解锁，首次获得 10 积分。</p><small>${kept?'已珍藏在你们的故事里':'每一次照料，都会靠近一点'}</small></article>`;}).join('')}</div></div>`;
+    const fmt=d=>d?new Date(d).toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric'}):null;
+    const keepsake=G.milestones(state).map(m=>{
+      const i=Number(m.id.slice(6));
+      const hit=i===0?null:state.logs.find(l=>l.text.includes('进入'+m.title));
+      const when=i===0?state.born:(hit?hit.at:null);
+      return `<article class="milestone keepsake ${m.unlocked?'current':'locked'}"><img class="stage-thumb" src="assets/stages/${state.selected}-${i+1}.png" alt="${m.title}立绘">${icon(m.unlocked?'sprout':'clock')}<h3>${m.title}</h3>${m.unlocked?`<small>${i===0?'相遇于':'到达于'} ${when?fmt(when):'很久以前'}</small>`:`<small>尚未到达</small>`}</article>`;
+    }).join('');
+    const emo=[30,65].map((n,i)=>{const kept=(state.emotionalMilestones||[]).includes(n);const hit=kept?state.logs.find(l=>l.text.includes('亲密度首次达到 '+n)):null;return `<article class="milestone ${kept?'current':''}">${icon('heart')}<h3>${i?'你是它的全世界':'开始认出你'}</h3><p>亲密度 ${n} 解锁，首次获得 10 积分。</p><small>${kept?(hit?'珍藏于 '+fmt(hit.at):'已珍藏在你们的故事里'):'每一次照料，都会靠近一点'}</small></article>`;}).join('');
+    el.innerHTML=`<div class="page-panel"><div class="eyebrow">LITTLE STEPS, BIG LOVE</div><h2>${escapeHtml(petName())}的成长足迹</h2><p>${st.description}<br>目前 ${st.label}，${state.xp} 点成长经验。${st.next?`下一阶段需要游戏年龄 ${st.next.age} 天与 ${st.next.xp} 经验。`:'成长还在继续，爱会留在每一天。'}${['sick','critical'].includes(G.healthTier(state))?'<br><b>生病的日子成长会慢一些，先照顾好身体。</b>':''}</p><h3>纪念相册</h3><div class="milestones keepsake-grid">${keepsake}</div><h3>双向奔赴的小瞬间</h3><div class="memory-cards">${emo}</div><h3>这个阶段，怎样好好照顾？</h3><div class="stage-guide"><p><b>${feedTitle}</b><br>${feedNames}</p><p><b>多久一次</b><br>${rhythm}</p><p><b>陪伴的时间</b><br>${times}</p></div></div>`;
   } else if(page==='diary') {
-    el.innerHTML=`<div class="page-panel"><div class="eyebrow">OUR ORDINARY, PRECIOUS DAYS</div><h2>${escapeHtml(petName())}的养育日记</h2><p>成长、拥抱和认真照料的时刻，都值得记住。</p>${[...state.logs].reverse().map(l=>`<article class="diary-entry"><time>${new Date(l.at).toLocaleString('zh-CN')}</time><p>${escapeHtml(l.text)}</p></article>`).join('')}</div>`;
+    const dayNo=Math.floor((now()-state.born)/86400000)+1;
+    const mins=Math.floor(state.daily.seconds/60);
+    const visits=state.daily.count;
+    const dtier=G.healthTier(state);
+    const feel=state.status==='left'?'这段日子已经收进了留念里。':dtier==='critical'?'它现在需要你多一点照顾。':dtier==='sick'?'它有点不舒服，记得多陪陪它。':state.needs.some(v=>v<40)?'有些小需求在等你回应。':'今天也安心地被陪伴着。';
+    el.innerHTML=`<div class="page-panel"><div class="eyebrow">OUR ORDINARY, PRECIOUS DAYS</div><h2>${escapeHtml(petName())}的养育日记</h2><p>成长、拥抱和认真照料的时刻，都值得记住。</p><section class="daily-recap"><span class="recap-eyebrow">TODAY'S LITTLE SUMMARY</span><h3>今天的小结</h3><div class="recap-stats"><span><b>${dayNo}</b> 相伴第几天</span><span><b>${mins}</b> 分钟陪伴</span><span><b>${visits}</b> 次照料</span><span><b>${escapeHtml(st.name)}</b> 当前阶段</span></div><p>${escapeHtml(feel)}</p></section>${[...state.logs].reverse().map(l=>`<article class="diary-entry"><time>${new Date(l.at).toLocaleString('zh-CN')}</time><p>${escapeHtml(l.text)}</p></article>`).join('')}</div>`;
   } else if(page==='pack') {
     const feedAct=state.selected==='plant'?'energy':'food';
     const careAct={food:feedAct,nutrition:feedAct,clean:'clean',comfort:'mood'};
@@ -279,11 +391,14 @@ function renderSecondary() {
         const place=item.category==='accessory'&&G.accessorySlot(item.id)==='place';
         const tag=equipped?(place?'摆放中':'穿戴中'):'';
         const dots=item.category==='accessory'?`<span class="dye-dots" role="group" aria-label="饰物染色">${[0,1,2].map(v=>`<button class="dye-dot${(state.tints[item.id]||0)===v?' active':''}" data-dye="${item.id}" data-variant="${v}" title="染成${['本色','暖调','冷调'][v]}" style="filter:hue-rotate(${[0,30,200][v]}deg)"></button>`).join('')}</span>`:'';
-        const info=`<div class="pack-info"><strong>${item.name}${tag?' <span class="worn-tag">'+tag+'</span>':''}</strong><p>${item.description}</p><small>${item.category==='accessory'?(equipped?(place?'摆放中 · 收起后回到背包':'佩戴中 · 脱下后回到背包'):(place?'收在背包 · 可随时放下':'收在背包 · 可随时穿上')):item.category==='medical'?`剩余 ${count} 份 · ${item.id==='medicine-kit'?'恢复 40 健康度 · 病危时也可使用':'恢复 60 健康度 · 病危时的更强选择'}`:`剩余 ${count} 份 · ${gainHint(item)||'照护时消耗'}`}</small></div>`;
+        const medNote=item.id==='medicine-kit'?(state.health<1?'健康度已见底，药箱回天乏力，改用回春灵药':'恢复 40 健康度 · 病危时也可使用'):'恢复 60 健康度 · 病危时的更强选择';
+        const info=`<div class="pack-info"><strong>${item.name}${tag?' <span class="worn-tag">'+tag+'</span>':''}</strong><p>${item.description}</p><small>${item.category==='accessory'?(equipped?(place?'摆放中 · 收起后回到背包':'佩戴中 · 脱下后回到背包'):(place?'收在背包 · 可随时放下':'收在背包 · 可随时穿上')):item.category==='medical'?`剩余 ${count} 份 · ${medNote}`:`剩余 ${count} 份 · ${gainHint(item)||'照护时消耗'}`}</small></div>`;
         let action='';
         if(item.category==='medical'){
-          const ok=state.health<70||!!state.criticalAt;
-          action=`<button data-toolbox="${item.id}" ${ok?'':'disabled'}>${ok?(count>1?`使用 · 共 ${count} 份`:'使用'):'暂不需要'}</button>`;
+          const kitSpent=item.id==='medicine-kit'&&state.health<1;
+          const ok=!kitSpent&&(state.health<70||!!state.criticalAt);
+          const label=kitSpent?'改用回春灵药':ok?(count>1?`使用 · 共 ${count} 份`:'使用'):'暂不需要';
+          action=`<button data-toolbox="${item.id}" ${ok?'':'disabled'}>${label}</button>`;
         } else if(item.category==='accessory'){
           const stageOk=st.index>=item.minStage;
           action=equipped?`<button data-wear="${item.id}" class="secondary">${place?'收起 · 收回背包':'脱下 · 收回背包'}</button>`:`<button data-wear="${item.id}" ${stageOk?'':'disabled'}>${stageOk?(place?'放下':'穿上'):'成长后解锁'}</button>`;
@@ -335,6 +450,8 @@ function clearMomentCard() {
   card.hidden=true;
   card.innerHTML='';
   delete card.dataset.momentId;
+  delete $('room-art').dataset.habit;
+  updateTabCue();
 }
 function hideMoment() {
   clearMomentCard();
@@ -353,6 +470,7 @@ function renderMoment() {
   if(!liveMoment||liveMoment.done)return;
   const remain=Math.max(0,Math.ceil((liveMoment.until-now())/1000));
   const card=$('moment-card');
+  if(liveMoment.habit) $('room-art').dataset.habit = liveMoment.habit;
   if(card.hidden||card.dataset.momentId!==liveMoment.id){
     card.hidden=false;
     card.dataset.momentId=liveMoment.id;
@@ -361,6 +479,7 @@ function renderMoment() {
     const el=$('moment-remain');
     if(el)el.textContent=`还剩 ${remain} 秒`;
   }
+  updateTabCue();
 }
 function finishMoment(outcome, notice) {
   if(!liveMoment||liveMoment.done)return;
@@ -396,7 +515,10 @@ function pulseMoment() {
   renderMoment();
 }
 function showCare(id) {
+  if(state.status==='left'){toast(G.petName(state)+(state.selected==='plant'?'的这一季已经结束，开始新的陪伴吧':'已经离开，开始新的陪伴吧'));return;}
   if(state.task && state.task.actionId!==id){toast('先完成已经开始的照护，再做下一件小事。');return;}
+  // 病危 / 过于虚弱时，照护本身无法开始，直接提示，不再弹出照护界面。
+  if(!state.task){const block=G.careBlock(state,id);if(block){toast(block);return;}}
   deferMoment();
   careId=id;
   const option=G.careOptions(state).find(a=>a.id===id);
@@ -615,6 +737,7 @@ document.addEventListener('click',e=>{
   }
   const b=e.target.closest('button');
   if(!b)return;
+  if(b.id==='stage-up-close'){$('stage-up').hidden=true;return;}
   if(b.dataset.adopt){selectedType=b.dataset.adopt;renderAdoption();return;}
   if(b.id==='adopt-confirm') {
     if(loadFailed&&!confirm('原存档读取失败。开始新故事将写入新的存档，是否继续？'))return;
@@ -632,6 +755,8 @@ document.addEventListener('click',e=>{
   if(b.dataset.page)navigate(b.dataset.page);
   if(b.dataset.care)showCare(b.dataset.care);
   if(b.dataset.filter){shopFilter=b.dataset.filter;renderSecondary();}
+  const departed=state.status==='left';
+  if(departed&&(b.dataset.buy||b.dataset.wear||b.dataset.dye!==undefined||b.dataset.remedy||b.dataset.toolbox||b.id==='relief-button')){toast(G.petName(state)+(state.selected==='plant'?'的这一季已经结束，开始新的陪伴吧':'已经离开，开始新的陪伴吧'));return;}
   if(b.dataset.buy)execute(()=>G.buy(state,b.dataset.buy,now()),'物资已放进小屋，照护时可以使用。');
   if(b.dataset.wear) {
     const id=b.dataset.wear;
@@ -761,7 +886,7 @@ setInterval(runNanny,5000);
 setInterval(()=>{
   if(!state.adopted||document.hidden||running)return;
   render();save();
-  if(reminderEnabled&&Math.min(...state.needs)<25&&Date.now()-lastReminder>300000){lastReminder=Date.now();toast(`${profile().name}需要一点照顾了，看看小屋的状态吧。`);}
+  if(reminderEnabled&&state.status!=='left'&&Math.min(...state.needs)<25&&Date.now()-lastReminder>300000){lastReminder=Date.now();toast(`${profile().name}需要一点照顾了，看看小屋的状态吧。`);}
 },15000);
 $('date').textContent=new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'});
 if(state.adopted) {

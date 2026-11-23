@@ -9,6 +9,56 @@ const assert = require('node:assert/strict');
     page.on('pageerror', error => errors.push(error.message));
     await page.goto('http://localhost:8000', { waitUntil: 'domcontentloaded' });
     await page.locator('#adopt-dialog').waitFor({ state: 'visible' });
+    // SEO metadata is present for crawlers and social cards.
+    const seo = await page.evaluate(() => ({
+      desc: document.querySelector('meta[name="description"]')?.content || '',
+      robots: document.querySelector('meta[name="robots"]')?.content || '',
+      og: !!document.querySelector('meta[property="og:title"]'),
+      jsonld: !!document.querySelector('script[type="application/ld+json"]')
+    }));
+    assert.ok(seo.desc.length > 10);
+    assert.match(seo.robots, /index/);
+    assert.equal(seo.og, true);
+    assert.equal(seo.jsonld, true);
+    const structured = await page.evaluate(() => {
+      const types = [...document.querySelectorAll('script[type="application/ld+json"]')]
+        .map(s => { try { return JSON.parse(s.textContent)['@type']; } catch { return 'ERR'; } });
+      const about = document.querySelector('.about');
+      return { types, about: !!about, steps: about ? about.querySelectorAll('ol li').length : 0 };
+    });
+    assert.ok(structured.types.includes('VideoGame'));
+    assert.ok(structured.types.includes('HowTo'));
+    assert.ok(structured.types.includes('FAQPage'));
+    assert.equal(structured.about, true);
+    assert.ok(structured.steps >= 3);
+    // Dynamic favicon + title switch between watching and away tabs.
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForTimeout(120);
+    const favIdle = await page.evaluate(() => ({
+      title: document.title, href: document.getElementById('favicon').getAttribute('href')
+    }));
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    await page.waitForTimeout(120);
+    const favAway = await page.evaluate(() => ({
+      title: document.title, href: document.getElementById('favicon').getAttribute('href')
+    }));
+    assert.ok(favAway.title !== favIdle.title, 'away tab title gains a hint prefix');
+    assert.ok(/^（.+）/.test(favAway.title), 'away title is wrapped in a hint');
+    assert.ok(decodeURIComponent(favAway.href) !== decodeURIComponent(favIdle.href),
+      'away favicon gains the attention dot');
+    // Urgency drives colour: the critical palette turns red via the TabCue API.
+    const favCritical = await page.evaluate(() => {
+      window.TabCue.set({ level: 'critical', count: 2, hint: '测试' });
+      return document.getElementById('favicon').getAttribute('href');
+    });
+    assert.ok(/c96a5e|b9554a/.test(decodeURIComponent(favCritical)), 'critical level uses the red palette');
+    await page.evaluate(() => {
+      window.TabCue.set({ level: 'ok', count: 0, hint: '它在等你' });
+      window.dispatchEvent(new Event('focus'));
+    });
+    await page.waitForTimeout(120);
+    const favBack = await page.evaluate(() => ({ title: document.title }));
+    assert.equal(favBack.title, favIdle.title);
     assert.equal(await page.locator('[data-adopt="plant"]').isVisible(), true);
     await page.locator('[data-adopt="plant"]').click();
     assert.match(await page.locator('[data-adopt="plant"]').innerText(), /安静养成/);
@@ -82,9 +132,11 @@ const assert = require('node:assert/strict');
     await page.locator('.close-button-inline').click();
     assert.equal(await page.locator('#welcome-back').isVisible(), false);
     await page.locator('nav [data-page="growth"]').click();
-    assert.match(await page.locator('#secondary-page').innerText(), /成长手册/);
+    assert.match(await page.locator('#secondary-page').innerText(), /成长足迹/);
+    assert.match(await page.locator('#secondary-page').innerText(), /纪念相册/);
     await page.locator('nav [data-page="diary"]').click();
     assert.match(await page.locator('#secondary-page').innerText(), /喂养完成/);
+    assert.match(await page.locator('#secondary-page').innerText(), /今天的小结/);
     await page.locator('nav [data-page="home"]').click();
     await page.locator('#care-cards [data-care="clean"]').click();
     assert.equal(await page.locator('#quantity-plus').count(), 0);
@@ -236,6 +288,29 @@ const assert = require('node:assert/strict');
     assert.match(await page.locator('#critical-banner').innerText(), /病危/);
     assert.match(await page.locator('#critical-banner').innerText(), /小时/);
     assert.equal(await page.locator('#critical-banner .critical-copy').count(), 1);
+    // In critical care the feeding cards are greyed out, their buttons are
+    // disabled, and clicking neither opens the care dialog nor starts anything.
+    const blockedCare = await page.evaluate(() => {
+      const card = [...document.querySelectorAll('.care-card')].find(c => c.querySelector('[data-care="food"]'));
+      const btn = card.querySelector('.care-action');
+      btn.click();
+      const afterBtn = document.getElementById('care-dialog').open;
+      showCare('food');
+      const afterGuard = document.getElementById('care-dialog').open;
+      return {
+        blocked: card.classList.contains('blocked'),
+        disabled: btn.disabled,
+        label: btn.textContent,
+        status: card.querySelector('.care-due').textContent,
+        afterBtn, afterGuard
+      };
+    });
+    assert.equal(blockedCare.blocked, true);
+    assert.equal(blockedCare.disabled, true);
+    assert.match(blockedCare.label, /病危中/);
+    assert.match(blockedCare.status, /病危了/);
+    assert.equal(blockedCare.afterBtn, false);
+    assert.equal(blockedCare.afterGuard, false);
     await page.setViewportSize({ width: 375, height: 812 });
     const bannerLayout = await page.locator('#critical-banner').evaluate(el => {
       const s = getComputedStyle(el);
@@ -258,8 +333,42 @@ const assert = require('node:assert/strict');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('#room-art .memorial').waitFor({ state: 'visible' });
     assert.equal(await page.evaluate(() => state.status), 'left');
-    assert.match(await page.locator('#room-art .memorial').innerText(), /再见了/);
-    assert.match(await page.locator('#room-art .memorial').innerText(), /相伴 \d+ 天/);
+    const memorialText = await page.locator('#room-art .memorial').innerText();
+    assert.match(memorialText, /阿团被接到了远方|已经离开|这一季/);
+    assert.match(memorialText, /相伴 \d+ 天/);
+    assert.match(memorialText, /亲密度/);
+    assert.equal(await page.locator('#restart-button').isVisible(), true);
+    assert.equal(await page.locator('#care-section').isHidden(), true);
+    assert.equal(await page.locator('#bond-card').isHidden(), true);
+    assert.equal(await page.locator('#bottom-grid').isHidden(), true);
+    assert.equal(await page.locator('#pet-touch').isHidden(), true);
+    assert.equal(await page.locator('.status-card').isHidden(), true);
+    assert.match(await page.locator('#room-weather').innerText(), /°C/);
+    assert.equal(await page.locator('#room-weather').evaluate(el => getComputedStyle(el).display !== 'none'), true);
+    await page.setViewportSize({ width: 375, height: 812 });
+    const memorialLayout = await page.locator('#room-art .memorial').evaluate(el => {
+      const card = el.closest('.room-card');
+      const art = el.parentElement;
+      const btn = el.querySelector('#restart-button');
+      const cs = getComputedStyle(card);
+      const artCs = getComputedStyle(art);
+      const btnBox = btn.getBoundingClientRect();
+      return {
+        overflow: cs.overflow,
+        artPos: artCs.position,
+        btnHeight: btnBox.height,
+        artGrows: art.clientHeight + 1 >= el.scrollHeight,
+        clipped: el.scrollHeight > art.clientHeight + 2
+      };
+    });
+    assert.equal(memorialLayout.overflow, 'visible');
+    assert.equal(memorialLayout.artPos, 'relative');
+    assert.ok(memorialLayout.btnHeight >= 40);
+    assert.equal(memorialLayout.artGrows, true);
+    assert.equal(memorialLayout.clipped, false);
+    assert.equal(await page.locator('#room-weather').evaluate(el => getComputedStyle(el).display !== 'none'), true);
+    assert.match(await page.locator('#room-weather').innerText(), /°C/);
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await page.locator('#restart-button').click();
     await page.locator('#adopt-dialog').waitFor({ state: 'visible' });
     await page.locator('[data-adopt="dog"]').click();
@@ -272,6 +381,8 @@ const assert = require('node:assert/strict');
     await page.evaluate(() => { state.momentDueAt = Date.now() - 1000; });
     await page.locator('#moment-card').waitFor({ state: 'visible', timeout: 2000 });
     assert.match(await page.locator('#moment-card').innerText(), /嗝|球|噩梦/);
+    const habit = await page.locator('#room-art').getAttribute('data-habit');
+    assert.ok(['wag', 'spin', 'run'].includes(habit), `dog habit was ${habit}`);
     const momentHit = await page.evaluate(() => {
       const before = state.bond;
       document.getElementById('moment-hit').click();
@@ -285,6 +396,27 @@ const assert = require('node:assert/strict');
     assert.match(await page.locator('#moment-card').innerText(), /嗝|球|噩梦/);
     await page.locator('#moment-hit').click();
     assert.equal(await page.locator('#moment-card').isVisible(), false);
+    // A growth-stage promotion shows a one-time memorial card over the room.
+    await page.evaluate(() => {
+      window.__stageUpRestore = { xp: state.xp, born: state.born, stageIndex: state.stageIndex };
+      lastStageIndex = 0;
+      state.xp = 600;
+      state.born = Date.now() - 13 * 86400000;
+      render();
+    });
+    await page.locator('#stage-up').waitFor({ state: 'visible', timeout: 2000 });
+    assert.match(await page.locator('#stage-up').innerText(), /进入新的阶段/);
+    await page.locator('#stage-up-close').click();
+    assert.equal(await page.locator('#stage-up').isVisible(), false);
+    await page.evaluate(() => {
+      const r = window.__stageUpRestore;
+      state.xp = r.xp;
+      state.born = r.born;
+      state.stageIndex = r.stageIndex;
+      lastStageIndex = r.stageIndex;
+      delete window.__stageUpRestore;
+      render();
+    });
     await page.locator('aside [data-page="settings"]').click();
     await page.locator('#nanny-enabled').check();
     assert.equal(await page.evaluate(() => localStorage.getItem('slow-growing-nanny')), '1');
@@ -512,7 +644,6 @@ const assert = require('node:assert/strict');
       await packPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
       await packPage.locator('[data-adopt="cat"]').click();
       await packPage.locator('#adopt-confirm').click();
-      await packPage.waitForTimeout(300);
       await packPage.locator('aside [data-page="pack"]').click();
       await packPage.waitForTimeout(200);
       assert.match(await packPage.locator('#secondary-page').innerText(), /照护物资/);

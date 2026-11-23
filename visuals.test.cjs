@@ -10,7 +10,7 @@ const profiles = {
 const sandbox = { window: { GameEngine: { profiles } }, GameEngine: { profiles } };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname, 'visuals.js'), 'utf8'), sandbox);
-const { scene, portrait, DIMS, HEIGHTS, WEAR_POS, BASE_Y, CENTER_X } = sandbox.window.GameVisuals;
+const { scene, portrait, DIMS, HEIGHTS, WEAR_POS, BASE_Y, CENTER_X, STAGE_ART, STAGE_COUNT, STAGE_TYPES } = sandbox.window.GameVisuals;
 
 for (const type of ['cat', 'dog', 'baby', 'plant']) {
   const svg = scene(type);
@@ -102,5 +102,61 @@ const plainTint = scene('cat', 3, { wear: 'acc-cat-1', place: null }, 'healthy',
 assert.ok(!plainTint.includes('hue-rotate'));
 const noTintArg = scene('cat', 3, { wear: 'acc-cat-1', place: null }, 'healthy');
 assert.ok(!noTintArg.includes('hue-rotate'));
+
+// Health tier drives the portrait filter attribute: lower tiers are marked,
+// healthy leaves the art untouched, and sick/critical also raise the sick flag.
+assert.ok(!scene('cat', 3, null, 'healthy').includes('data-tier'));
+for (const tier of ['low', 'sick', 'critical']) {
+  assert.match(scene('cat', 3, null, tier), new RegExp(`data-tier="${tier}"`));
+}
+assert.match(scene('cat', 3, null, 'sick'), /data-sick="true"/);
+assert.match(scene('cat', 3, null, 'critical'), /data-sick="true"/);
+assert.ok(!scene('cat', 3, null, 'low').includes('data-sick'));
+
+// Stage-art manifest is the single source of truth: every listed file exists on
+// disk, derived tables match it, and portrait can render any bracket.
+assert.equal(STAGE_COUNT, 4);
+for (const type of STAGE_TYPES) {
+  assert.equal(STAGE_ART[type].length, STAGE_COUNT, `${type} stage count`);
+  assert.equal(HEIGHTS[type].length, STAGE_COUNT);
+  assert.equal(Object.keys(DIMS[type]).length, STAGE_COUNT);
+  STAGE_ART[type].forEach((art, i) => {
+    assert.ok(fs.existsSync(path.join(__dirname, art.file)), `missing ${art.file}`);
+    assert.equal(DIMS[type][i][0], art.w);
+    assert.equal(DIMS[type][i][1], art.h);
+    assert.equal(HEIGHTS[type][i], art.height);
+    assert.match(portrait(type, i), new RegExp(art.file.replace(/\./g, '\\.')));
+    assert.match(scene(type, i), new RegExp(art.file.replace(/\./g, '\\.')));
+  });
+}
+assert.equal([...STAGE_TYPES].sort().join(','), 'baby,cat,dog,plant');
+
+// Sick state variants: any stage marked with a sick variant must swap in the
+// variant file when the tier is sick/critical and fall back to the base art
+// when healthy, while every variant file exists on disk.
+for (const type of STAGE_TYPES) {
+  STAGE_ART[type].forEach((art, i) => {
+    const sick = art.variants && art.variants.sick;
+    if (!sick) return;
+    assert.ok(fs.existsSync(path.join(__dirname, sick.file)), `missing ${sick.file}`);
+    const esc = sick.file.replace(/\./g, '\\.');
+    assert.match(scene(type, i, null, 'sick'), new RegExp(esc));
+    assert.match(scene(type, i, null, 'critical'), new RegExp(esc));
+    assert.ok(!scene(type, i, null, 'healthy').includes(sick.file));
+    assert.ok(!scene(type, i, null, 'low').includes(sick.file));
+  });
+}
+
+// A sick plant that wears the leaf-pattern pot must still render the full
+// variant art instead of being cropped to the pot-rim ratio. The variant ships
+// its own pot, so it renders as a full <image> (not a cropped <svg>) and no
+// separate pot layer is stacked on top.
+for (let i = 0; i < STAGE_COUNT; i++) {
+  const svg = scene('plant', i, 'acc-plant-1', 'sick');
+  assert.match(svg, new RegExp(`stages/plant-${i + 1}-sick\\.png`));
+  assert.ok(svg.includes('<image class="pet-breathe"'), 'sick plant should render as a full image');
+  assert.ok(!svg.includes('<svg class="pet-breathe"'), 'sick plant should not be cropped');
+  assert.ok(!svg.includes('data-worn="acc-plant-1"'), 'no separate pot layer on a sick plant');
+}
 
 console.log('通过：四角色场景含手绘背景与阶段立绘，饰物叠加、阶段锚点与领养肖像均指向图片资源且可区分。');

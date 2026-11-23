@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+# 站点为单页 HTML，部署到正式域名后可补充内容型 sitemap。

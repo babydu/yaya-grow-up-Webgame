@@ -1,0 +1,15 @@
+{
+  "name": "慢慢长大 · 把日子过成陪伴",
+  "short_name": "慢慢长大",
+  "description": "温柔治愈的浏览器养成小游戏：从橘汐、麦芽、阿团、团子中选一个，陪它在真实时间里慢慢长大。",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f8f4",
+  "theme_color": "#6c8160",
+  "icons": [
+    { "src": "assets/icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

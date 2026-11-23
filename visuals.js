@@ -28,23 +28,54 @@
   };
   const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.heart}"/></svg>`;
 
-  // Cutout pixel dimensions (w, h) per stage file, baked from the asset pipeline.
-  const DIMS = {"acc": {"acc-baby-1": [283, 313], "acc-baby-2": [269, 332], "acc-baby-3": [327, 258], "acc-baby-4": [197, 209], "acc-cat-1": [299, 505], "acc-cat-2": [327, 499], "acc-cat-3": [327, 302], "acc-cat-4": [135, 445], "acc-dog-1": [268, 357], "acc-dog-2": [327, 464], "acc-dog-3": [327, 515], "acc-dog-4": [148, 155], "acc-plant-1": [246, 272], "acc-plant-2": [309, 213], "acc-plant-3": [238, 387], "acc-plant-4": [191, 456]}, "baby": {"0": [340, 507], "1": [382, 543], "2": [362, 691], "3": [371, 720]}, "cat": {"0": [388, 462], "1": [393, 527], "2": [347, 583], "3": [384, 720]}, "dog": {"0": [373, 325], "1": [394, 480], "2": [420, 686], "3": [385, 720]}, "plant": {"0": [230, 320], "1": [254, 388], "2": [273, 545], "3": [326, 581]}};
-  // Display height (viewBox units) of each stage on the room floor.
-  const HEIGHTS = {
-    baby: [96, 118, 140, 158],
-    cat: [118, 138, 160, 178],
-    dog: [118, 140, 162, 180],
-    plant: [104, 128, 152, 172]
+  // Single source of truth for stage art. Each entry is one cutout file with
+  // its pixel width/height, the on-floor display height (viewBox units) and,
+  // for plants only, the pot-rim ratio used by the leaf-pattern pot crop.
+  // Adding or swapping a stage image means editing this table alone.
+  const STAGE_ART = {
+    baby: [
+      { file: 'assets/stages/baby-1.png', w: 340, h: 507, height: 96, variants: { sick: { file: 'assets/stages/baby-1-sick.png', w: 405, h: 580 } } },
+      { file: 'assets/stages/baby-2.png', w: 382, h: 543, height: 118, variants: { sick: { file: 'assets/stages/baby-2-sick.png', w: 367, h: 580 } } },
+      { file: 'assets/stages/baby-3.png', w: 362, h: 691, height: 140, variants: { sick: { file: 'assets/stages/baby-3-sick.png', w: 267, h: 580 } } },
+      { file: 'assets/stages/baby-4.png', w: 371, h: 720, height: 158, variants: { sick: { file: 'assets/stages/baby-4-sick.png', w: 279, h: 580 } } }
+    ],
+    cat: [
+      { file: 'assets/stages/cat-1.png', w: 388, h: 462, height: 118, variants: { sick: { file: 'assets/stages/cat-1-sick.png', w: 482, h: 580 } } },
+      { file: 'assets/stages/cat-2.png', w: 393, h: 527, height: 138, variants: { sick: { file: 'assets/stages/cat-2-sick.png', w: 450, h: 580 } } },
+      { file: 'assets/stages/cat-3.png', w: 347, h: 583, height: 160, variants: { sick: { file: 'assets/stages/cat-3-sick.png', w: 462, h: 580 } } },
+      { file: 'assets/stages/cat-4.png', w: 384, h: 720, height: 178, variants: { sick: { file: 'assets/stages/cat-4-sick.png', w: 484, h: 580 } } }
+    ],
+    dog: [
+      { file: 'assets/stages/dog-1.png', w: 373, h: 325, height: 118, variants: { sick: { file: 'assets/stages/dog-1-sick.png', w: 710, h: 580 } } },
+      { file: 'assets/stages/dog-2.png', w: 394, h: 480, height: 140, variants: { sick: { file: 'assets/stages/dog-2-sick.png', w: 401, h: 580 } } },
+      { file: 'assets/stages/dog-3.png', w: 420, h: 686, height: 162, variants: { sick: { file: 'assets/stages/dog-3-sick.png', w: 399, h: 580 } } },
+      { file: 'assets/stages/dog-4.png', w: 385, h: 720, height: 180, variants: { sick: { file: 'assets/stages/dog-4-sick.png', w: 427, h: 580 } } }
+    ],
+    plant: [
+      { file: 'assets/stages/plant-1.png', w: 230, h: 320, height: 104, potCut: 0.203, variants: { sick: { file: 'assets/stages/plant-1-sick.png', w: 414, h: 580 } } },
+      { file: 'assets/stages/plant-2.png', w: 254, h: 388, height: 128, potCut: 0.351, variants: { sick: { file: 'assets/stages/plant-2-sick.png', w: 376, h: 580 } } },
+      { file: 'assets/stages/plant-3.png', w: 273, h: 545, height: 152, potCut: 0.523, variants: { sick: { file: 'assets/stages/plant-3-sick.png', w: 313, h: 580 } } },
+      { file: 'assets/stages/plant-4.png', w: 326, h: 581, height: 172, potCut: 0.565, variants: { sick: { file: 'assets/stages/plant-4-sick.png', w: 277, h: 580 } } }
+    ]
   };
-  // Worn accessory placement as fractions of the character box.
-  // x/y/w are relative to the character box; bottom:true anchors the item's
-  // lower edge to the character baseline (ground / feet).
-  // Plant stage art bakes in its own pot. When the leaf-pattern pot is worn,
-  // crop the base art above these per-stage pot-rim ratios (measured from the
-  // PNGs) via a nested svg viewBox, and draw the new pot behind the foliage.
-  const POT_CUT = { plant: [.203, .351, .523, .565] };
-  const POT_ACC = { plant: 'acc-plant-1' };
+  const STAGE_TYPES = Object.keys(STAGE_ART);
+  const STAGE_COUNT = Math.max(...STAGE_TYPES.map(t => STAGE_ART[t].length));
+  for (const type of STAGE_TYPES) {
+    if (STAGE_ART[type].length !== STAGE_COUNT) throw new Error(`stage art for ${type} must have ${STAGE_COUNT} entries`);
+  }
+  // Derived lookup tables keep the older call sites and tests working.
+  const DIMS = { acc: {"acc-baby-1": [283, 313], "acc-baby-2": [269, 332], "acc-baby-3": [327, 258], "acc-baby-4": [197, 209], "acc-cat-1": [299, 505], "acc-cat-2": [327, 499], "acc-cat-3": [327, 302], "acc-cat-4": [135, 445], "acc-dog-1": [268, 357], "acc-dog-2": [327, 464], "acc-dog-3": [327, 515], "acc-dog-4": [148, 155], "acc-plant-1": [246, 272], "acc-plant-2": [309, 213], "acc-plant-3": [238, 387], "acc-plant-4": [191, 456]} };
+  const HEIGHTS = {};
+  const POT_CUT = { plant: [] };
+  for (const type of STAGE_TYPES) {
+    DIMS[type] = {};
+    HEIGHTS[type] = [];
+    STAGE_ART[type].forEach((art, i) => {
+      DIMS[type][i] = [art.w, art.h];
+      HEIGHTS[type].push(art.height);
+      if (type === 'plant') POT_CUT.plant.push(art.potCut);
+    });
+  }
   const WEAR_POS = {
     baby: {
       'acc-baby-1': { x: .5, y: -.08, w: .46 },
@@ -73,21 +104,37 @@
   };
   const BASE_Y = 316;
   const CENTER_X = 312;
+  const POT_ACC = { plant: 'acc-plant-1' };
+  // Fallback entry used when a stage index has no art yet (keeps rendering safe
+  // while new age brackets are being added).
+  // Returns the art entry for a stage, optionally swapping in a state variant
+  // (e.g. the sick portrait). A variant keeps the base display height so the
+  // character stays the same size while its expression changes.
+  const stageArt = (type, n, tier) => {
+    const list = STAGE_ART[type] || STAGE_ART.cat;
+    const base = list[n] || list[list.length - 1];
+    const variant = tier === 'sick' || tier === 'critical'
+      ? (base.variants && base.variants.sick) : null;
+    if (!variant) return base;
+    return { file: variant.file, w: variant.w, h: variant.h, height: base.height };
+  };
 
-  function portrait(type) {
-    const src = `assets/stages/${type}-1.png`;
-    return `<img class="portrait" src="${src}" alt="" aria-hidden="true">`;
+  function portrait(type, stageIndex) {
+    const n = Math.min(STAGE_COUNT - 1, Math.max(0, stageIndex || 0));
+    return `<img class="portrait" src="${stageArt(type, n).file}" alt="" aria-hidden="true">`;
   }
 
   function companion(type, stageIndex, worn, tier, tints) {
     const tintOf = id => (tints && tints[id]) || 0;
     const accFilter = id => tintOf(id) ? ` style="filter:hue-rotate(${[0, 30, 200][tintOf(id)]}deg)"` : '';
-    const n = Math.min(3, Math.max(0, stageIndex || 0));
-    const dim = (DIMS[type] || DIMS.cat)[n];
-    const d = (HEIGHTS[type] || HEIGHTS.cat)[n];
+    const n = Math.min(STAGE_COUNT - 1, Math.max(0, stageIndex || 0));
+    const art = stageArt(type, n, tier);
+    const dim = [art.w, art.h];
+    const d = art.height;
     const iw = +(dim[0] * d / dim[1]).toFixed(1);
     const ix = +(CENTER_X - iw / 2).toFixed(1);
     const iy = +(BASE_Y - d).toFixed(1);
+    const mood = tier === 'sick' || tier === 'critical' || tier === 'low' ? ` data-tier="${tier}"` : '';
     const sick = tier === 'sick' || tier === 'critical' ? ' data-sick="true"' : '';
     const potId = POT_ACC[type];
     const slots = worn && typeof worn === 'object' && !Array.isArray(worn)
@@ -95,7 +142,9 @@
       : { wear: null, place: null };
     const single = typeof worn === 'string' ? worn : null;
     const hasPot = single === potId || slots.place === potId;
-    const potCut = hasPot ? POT_CUT[type][n] : null;
+    // A state variant ships its own full-body art (pot included), so it must
+    // not be cropped by the pot-cut path nor have a pot layer stacked on it.
+    const potCut = hasPot && art.potCut ? art.potCut : null;
     const drawAcc = (id, isPot) => {
       const adim = DIMS.acc[id];
       if (!adim) return '';
@@ -117,7 +166,7 @@
       const ay = +(pos.bottom ? iy + d - ah : iy + d * pos.y).toFixed(1);
       return `<image class="acc-worn" data-worn="${id}"${accFilter(id)} href="assets/acc/${id.slice(4)}.png" x="${ax}" y="${ay}" width="${aw}" height="${ah}" preserveAspectRatio="xMidYMid meet"/>`;
     };
-    const potAcc = hasPot ? drawAcc(potId, true) : '';
+    const potAcc = potCut ? drawAcc(potId, true) : '';
     const placeAcc = single ? '' : (slots.place && slots.place !== potId ? drawAcc(slots.place, false) : '');
     const wearAcc = single && single !== potId ? drawAcc(single, false)
       : (slots.wear ? drawAcc(slots.wear, false) : '');
@@ -125,12 +174,12 @@
     if (potCut) {
       const cropH = +(d * potCut).toFixed(1);
       const vbH = +(dim[1] * potCut).toFixed(1);
-      pet = `<svg class="pet-breathe"${sick} data-character="${type}" data-stage="${n}" x="${ix}" y="${iy}" width="${iw}" height="${cropH}" viewBox="0 0 ${dim[0]} ${vbH}" preserveAspectRatio="xMidYMin meet" overflow="hidden"><image href="assets/stages/${type}-${n + 1}.png" width="${dim[0]}" height="${dim[1]}"/></svg>`;
+      pet = `<svg class="pet-breathe"${mood}${sick} data-character="${type}" data-stage="${n}" x="${ix}" y="${iy}" width="${iw}" height="${cropH}" viewBox="0 0 ${dim[0]} ${vbH}" preserveAspectRatio="xMidYMin meet" overflow="hidden"><image href="${art.file}" width="${dim[0]}" height="${dim[1]}"/></svg>`;
     } else {
-      pet = `<image class="pet-breathe"${sick} data-character="${type}" data-stage="${n}" href="assets/stages/${type}-${n + 1}.png" x="${ix}" y="${iy}" width="${iw}" height="${d}" preserveAspectRatio="xMidYMid meet"/>`;
+      pet = `<image class="pet-breathe"${mood}${sick} data-character="${type}" data-stage="${n}" href="${art.file}" x="${ix}" y="${iy}" width="${iw}" height="${d}" preserveAspectRatio="xMidYMid meet"/>`;
     }
     const shadow = `<ellipse cx="${CENTER_X}" cy="${BASE_Y}" rx="${(iw * 0.42).toFixed(1)}" ry="9" fill="#b8a97e" opacity=".28"/>`;
-    return hasPot ? `${shadow}${potAcc}${pet}${placeAcc}${wearAcc}` : `${shadow}${pet}${placeAcc}${wearAcc}`;
+    return potAcc ? `${shadow}${potAcc}${pet}${placeAcc}${wearAcc}` : `${shadow}${pet}${placeAcc}${wearAcc}`;
   }
 
   function hearts() {
@@ -164,5 +213,6 @@
     </svg>`;
   }
 
-  window.GameVisuals = { icon, scene, portrait, DIMS, HEIGHTS, WEAR_POS, BASE_Y, CENTER_X };
+  window.GameVisuals = { icon, scene, portrait, DIMS, HEIGHTS, WEAR_POS, BASE_Y, CENTER_X,
+    STAGE_ART, STAGE_COUNT, STAGE_TYPES };
 })();

@@ -59,3 +59,15 @@ Entries discovered by the Agent during task execution should follow this format:
   - Force growth stage via `s.xp = 9999; s.born = NOW - 365*86400000` then `G.load(...)`; stage 0 needs xp 0 and fresh born.
   - Screenshot `#room-art` and read the PNG with the Read tool to judge placement; engine `G.stage(state).index` gates the stage, direct `state.stageIndex` edits are ignored.
   - Place-slot props need `bottom: true` or per-stage y tuning, else they float above the floor.
+
+[Image generation uses Agnes image-2.5-flash]
+- Date: 2026-11-22
+- Context: User instructed to permanently use the Agnes model for all drawing tasks unless explicitly told otherwise.
+- Category: Environment Configuration
+- Instructions:
+  - Use `agnes-image-2.5-flash` via `POST https://api.agnes-ai.cn/v1/images/generations`. Docs: https://www.agnes-ai.cn/zh-Hans/docs/agnes-image-25-flash
+  - The API key is supplied by the user at runtime; never write it into the repo, MEMORY.md, or any committed file.
+  - Prefer image-to-image (img2img) with the existing art as `extra_body.image` reference to keep character consistency; only change expression/pose.
+  - Body shape: `{model, prompt, size, ratio, extra_body:{image:[url|dataURI], response_format:'url'}}`. Response path `data[0].url`. Do not put `response_format` at the top level; do not send `tags:["img2img"]`.
+  - Sizes use tiers `1K`/`2K`/`3K`/`4K` plus a `ratio`; `3:4` at `1K` = 864x1152.
+  - Generated white-background portraits are cut to transparent RGBA (white -> alpha) before use as stage variants.
