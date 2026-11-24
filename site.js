@@ -16,7 +16,8 @@
   const BASE = {
     site: { footerNote: '' },
     ads: { topEnabled: true, bottomEnabled: true, items: [] },
-    announcement: { enabled: false, version: 0, title: '', body: '', link: '', ticker: true, modal: true }
+    announcement: { enabled: false, version: 0, title: '', body: '', link: '', ticker: true, modal: true },
+    prices: {}
   };
 
   const clone = o => JSON.parse(JSON.stringify(o));
@@ -39,6 +40,7 @@
       if (Array.isArray(extra.ads.items)) out.ads.items = extra.ads.items.map(normalizeAd).filter(Boolean);
     }
     if (extra.announcement && typeof extra.announcement === 'object') out.announcement = { ...out.announcement, ...extra.announcement };
+    if (extra.prices && typeof extra.prices === 'object' && !Array.isArray(extra.prices)) out.prices = { ...out.prices, ...extra.prices };
     return out;
   }
   function codeDefaults() {
@@ -58,13 +60,21 @@
   }
   function adminToken() { return String((codeDefaults().adminToken) || '').trim(); }
 
+  // Push the effective price table into the engine so shops/buy all agree.
+  function syncPrices() {
+    const g = window.GameEngine;
+    if (g && typeof g.applyPriceOverrides === 'function') {
+      g.applyPriceOverrides(getConfig().prices || {});
+      try { window.dispatchEvent(new Event('site-config-applied')); } catch (_) { /* ignore */ }
+    }
+  }
   function load() {
     if (readyPromise) return readyPromise;
     readyPromise = fetch('data/site-config.json?t=' + Date.now(), { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
       .then(j => { remote = (j && typeof j === 'object') ? j : null; })
       .catch(() => { remote = null; })
-      .then(() => { renderAll(); return getConfig(); });
+      .then(() => { syncPrices(); renderAll(); return getConfig(); });
     return readyPromise;
   }
   function refresh() { readyPromise = null; return load(); }
@@ -177,7 +187,7 @@
     }).catch(() => ({ ok: false, error: 'network' }));
   }
   function exportJson(cfg) {
-    const clean = { site: cfg.site, ads: cfg.ads, announcement: cfg.announcement, updatedAt: Date.now() };
+    const clean = { site: cfg.site, ads: cfg.ads, announcement: cfg.announcement, prices: cfg.prices || {}, updatedAt: Date.now() };
     return JSON.stringify(clean, null, 2);
   }
 
@@ -185,8 +195,8 @@
     BASE, getConfig, adminToken, refresh, load,
     save, exportJson, renderAll, hasRemote: () => !!remote,
     normalizeAd, dismissed, clearDismissed,
-    preview(cfg) { previewCfg = cfg; renderAll(); },
-    clearPreview() { previewCfg = null; renderAll(); },
+    preview(cfg) { previewCfg = cfg; syncPrices(); renderAll(); },
+    clearPreview() { previewCfg = null; syncPrices(); renderAll(); },
     isPreviewing: () => !!previewCfg
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

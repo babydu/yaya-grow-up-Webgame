@@ -20,5 +20,7 @@ window.SITE_CONFIG = {
     topEnabled: true,
     bottomEnabled: true,
     items: []
-  }
+  },
+  // Optional global price overrides { itemId: packPrice }. Empty = built-in.
+  prices: {}
 };

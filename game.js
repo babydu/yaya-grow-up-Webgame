@@ -959,6 +959,8 @@ window.addEventListener('storage',e=>{
   if(e.key!==saveKey||!e.newValue)return;
   try{running=false;state=G.load(e.newValue,null,Date.now());$('care-dialog').close();careId=null;delete $('room-art').dataset.sceneKey;$('room-art').innerHTML='';if(state.adopted)$('adopt-dialog').close();render();toast('已同步另一页面的进度，请在一个页面中照护。');}catch{toast('另一页面的存档暂时无法同步。');}
 });
+// Global price overrides were applied by site.js; refresh any open views.
+window.addEventListener('site-config-applied',()=>{ if(state && state.adopted) render(); });
 setInterval(tick,250);
 setInterval(runNanny,5000);
 setInterval(()=>{

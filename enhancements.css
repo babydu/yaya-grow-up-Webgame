@@ -291,3 +291,11 @@
 .ops-inline{display:flex;flex-wrap:wrap;gap:14px;margin:6px 0}
 .ops-details{margin-top:12px}
 .ops-details summary{cursor:pointer;font-size:12px;color:#7d8574;margin-bottom:8px}
+
+/* Ops price editor */
+.ops-prices{display:flex;flex-direction:column;gap:16px;margin:8px 0 12px}
+.ops-price-group h4{margin:0 0 6px;font-size:12px;color:#7d8574;font-weight:600}
+.ops-price-row{display:grid;grid-template-columns:1fr 96px;gap:4px 10px;align-items:center;padding:7px 0;border-bottom:1px dashed #eceee4}
+.ops-price-name{font-size:12px;color:#5d6b52;overflow-wrap:anywhere}
+.ops-price-row input[type=number]{border:1px solid #dbe3cd;border-radius:7px;padding:7px 9px;font:inherit;font-size:12px;background:#f7f9f1;color:#5d6b52;width:100%;box-sizing:border-box}
+.ops-price-meta{grid-column:1 / -1;font-size:10px;color:#a3ab95}

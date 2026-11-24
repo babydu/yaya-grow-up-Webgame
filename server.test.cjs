@@ -37,7 +37,8 @@ test('site-config API: public read, token-guarded global write that persists', a
         ads: { topEnabled: false, bottomEnabled: true, items: [
           { id: 'a1', slot: 'bottom', text: '赞助卡片文案', link: 'https://example.com', enabled: true, junk: 'drop' }
         ] },
-        announcement: { enabled: true, version: 1234, title: '公告标题', body: '公告正文', link: '', ticker: true, modal: true }
+        announcement: { enabled: true, version: 1234, title: '公告标题', body: '公告正文', link: '', ticker: true, modal: true },
+        prices: { 'cat-milk': 25, 'bad': 0, 'neg': -5, 'big': 9999999 }
       })
     });
     assert.equal(r.status, 200);
@@ -53,6 +54,10 @@ test('site-config API: public read, token-guarded global write that persists', a
     assert.equal(cfg.ads.items[0].junk, undefined); // sanitised
     assert.equal(cfg.announcement.title, '公告标题');
     assert.equal(cfg.announcement.version, 1234);
+    assert.equal(cfg.prices['cat-milk'], 25);
+    assert.equal(cfg.prices.bad, undefined);   // 0 dropped
+    assert.equal(cfg.prices.neg, undefined);   // negative dropped
+    assert.equal(cfg.prices.big, undefined);   // out of range dropped
 
     // Wrong token rejected.
     r = await fetch(base + '/api/site-config', {

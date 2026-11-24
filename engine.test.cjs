@@ -200,8 +200,10 @@ test('checkin uses local calendar across months, leap days, year and gaps; same 
 
 test('purchase validates points, species, stage, id and quantity; catalog covers stages', () => {
   const s = pet();
+  const milkPrice = G.catalog.find(p => p.id === 'cat-milk').price;
+  const beforeBuy = s.points;
   assert.equal(G.buy(s, 'cat-milk', NOW), null);
-  assert.equal(s.points, 50);
+  assert.equal(s.points, beforeBuy - milkPrice);
   assert.equal(s.inventory['cat-milk'], 10);
   for (const id of ['dog-milk', 'cat-food-2', 'bad', '__proto__']) {
     assert.equal(typeof G.buy(s, id, NOW), 'string');
@@ -1020,11 +1022,11 @@ test('clean uses one unit and quality tiers change cleanliness', () => {
     const comfort = G.catalog.find(p => p.id === type + '-clean');
     const plus = G.catalog.find(p => p.id === type + '-clean-plus');
     assert.equal(basic.gain[1], 35);
-    assert.equal(basic.price, 8);
+    assert.equal(basic.price, 15);
     assert.equal(comfort.gain[1], 45);
-    assert.equal(comfort.price, 10);
+    assert.equal(comfort.price, 18);
     assert.equal(plus.gain[1], 55);
-    assert.equal(plus.price, 16);
+    assert.equal(plus.price, 24);
     assert.match(plus.description, /专业人士/);
   }
   for (let i = 1; i < 4; i++) {
@@ -1304,6 +1306,7 @@ test('nanny cares for all due actions at double consumption', () => {
 });
 
 test('nanny restocks at double price and blocks without points', () => {
+  const milkPrice = G.catalog.find(p => p.id === 'cat-milk').price;
   const s = pet();
   s.needs = [40, 100, 100, 100];
   s.inventory['cat-milk'] = 0;
@@ -1311,7 +1314,7 @@ test('nanny restocks at double price and blocks without points', () => {
   const r = G.nanny(s, NOW);
   assert.equal(r.cared.length, 1);
   assert.equal(s.inventory['cat-milk'], 3);
-  assert.equal(s.points, 40); // double-price restock (20) with no care-point reward
+  assert.equal(s.points, 60 - milkPrice * 2); // double-price restock, no care-point reward
   assert.ok(s.logs.some(l => l.text.includes('贴心管家按双倍价格代购了')));
 
   const t = pet();
@@ -1332,7 +1335,7 @@ test('nanny restocks at double price and blocks without points', () => {
   const r3 = G.nanny(single, NOW);
   assert.equal(r3.cared.length, 1);
   assert.equal(single.inventory['cat-milk'], 4);
-  assert.equal(single.points, 980); // restock 20, no care points
+  assert.equal(single.points, 1000 - milkPrice * 2); // double-price restock, no care points
 });
 
 test('nanny matches needs/xp/bond but earns no care points', () => {
@@ -1530,4 +1533,25 @@ test('nanny care does not add points or fill the daily care cap', () => {
   assert.equal(r.cared.length, 1);
   assert.equal(s.points, before); // no care points from the nanny
   assert.equal(s.daily.earned, 0);
+});
+
+test('price overrides apply globally, validate values and reset to defaults', () => {
+  const base = G.basePrices();
+  const milk = () => G.catalog.find(p => p.id === 'cat-milk').price;
+  assert.equal(milk(), base['cat-milk']);
+  G.applyPriceOverrides({ 'cat-milk': 999, 'revive-elixir': 80, nope: 5, 'cat-clean': -3 });
+  assert.equal(milk(), 999);
+  assert.equal(G.catalog.find(p => p.id === 'revive-elixir').price, 80);
+  assert.equal(G.catalog.find(p => p.id === 'cat-clean').price, base['cat-clean']);
+  // Buying uses the overridden price.
+  const s = pet();
+  s.points = 1000;
+  assert.equal(G.buy(s, 'cat-milk', NOW), null);
+  assert.equal(s.points, 1);
+  // Invalid override falls back to the built-in default.
+  G.applyPriceOverrides({ 'cat-milk': 0 });
+  assert.equal(milk(), base['cat-milk']);
+  // Empty map restores all defaults.
+  G.applyPriceOverrides({});
+  assert.equal(milk(), base['cat-milk']);
 });

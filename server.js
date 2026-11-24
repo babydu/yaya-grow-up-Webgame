@@ -75,6 +75,16 @@ function sanitizeConfig(input) {
       };
     }
   }
+  out.prices = {};
+  if (input.prices && typeof input.prices === 'object' && !Array.isArray(input.prices)) {
+    let n = 0;
+    for (const [k, v] of Object.entries(input.prices)) {
+      if (n >= 500) break;
+      const id = String(k).slice(0, 80);
+      const num = Number(v);
+      if (Number.isSafeInteger(num) && num >= 1 && num <= 1000000) { out.prices[id] = num; n++; }
+    }
+  }
   out.updatedAt = Date.now();
   return out;
 }

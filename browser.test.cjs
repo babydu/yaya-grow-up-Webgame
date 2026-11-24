@@ -741,6 +741,14 @@ const assert = require('node:assert/strict');
       await opsPage.evaluate(() => { location.hash = 'ops=mkx7d2'; });
       await opsPage.waitForTimeout(300);
       assert.equal(await opsPage.locator('#ops-root').isVisible(), true);
+      // Price editor: override cat-milk, preview applies to the engine, reset restores default.
+      await opsPage.locator('#ops-prices input[data-price-id="cat-milk"]').fill('37');
+      await opsPage.locator('#ops-preview').click();
+      assert.equal(await opsPage.evaluate(() => window.GameEngine.catalog.find(p => p.id === 'cat-milk').price), 37);
+      await opsPage.locator('#ops-prices-reset').click();
+      await opsPage.locator('#ops-preview').click();
+      const baseMilk = await opsPage.evaluate(() => window.GameEngine.basePrices()['cat-milk']);
+      assert.equal(await opsPage.evaluate(() => window.GameEngine.catalog.find(p => p.id === 'cat-milk').price), baseMilk);
       await opsPage.locator('#ops-preset-top').click();
       await opsPage.locator('#ops-preview').click();
       await opsPage.locator('#ops-close').click();

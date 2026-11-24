@@ -118,51 +118,51 @@
   }
   for (const type of ['cat', 'dog']) {
     const kind = profiles[type].kind;
-    product(type + '-milk', kind + '专用奶粉', 'bottle', 'food', [type], 0, 10, 5,
+    product(type + '-milk', kind + '专用奶粉', 'bottle', 'food', [type], 0, 20, 5,
       [45, 0, 0, 5], '初生期专用奶粉。');
     for (let i = 1; i < 4; i++) {
       product(type + '-food-' + i, kind + names[i] + '主食', 'bag', 'food', [type], i,
-        12 + i * 2, 5, [45, 0, 0, 5], '与当前成长阶段匹配的日常主食。');
+        20 + i * 2, 5, [45, 0, 0, 5], '与当前成长阶段匹配的日常主食。');
     }
   }
-  product('baby-milk', '宝宝配方奶粉', 'bottle', 'food', ['baby'], 0, 10, 5,
+  product('baby-milk', '宝宝配方奶粉', 'bottle', 'food', ['baby'], 0, 20, 5,
     [45, 0, 0, 5], '初生、探索与辅食阶段均可使用的配方奶粉。');
-  product('baby-food-2', '宝宝辅食', 'bag', 'food', ['baby'], 2, 16, 5,
+  product('baby-food-2', '宝宝辅食', 'bag', 'food', ['baby'], 2, 24, 5,
     [45, 0, 0, 5], '成长期辅食，游戏中的简化养育设定。');
-  product('baby-food-3', '宝宝均衡餐', 'bag', 'food', ['baby'], 3, 18, 5,
+  product('baby-food-3', '宝宝均衡餐', 'bag', 'food', ['baby'], 3, 26, 5,
     [50, 0, 0, 5], '幼儿期的多样均衡餐。');
   const cleanNames = { cat: '猫砂', dog: '尿垫', baby: '尿裤' };
   const cleanHint = '档位差为游戏模拟，现实照护请咨询专业人士。';
   for (const type of ['cat', 'dog', 'baby']) {
     const name = cleanNames[type];
-    product(type + '-clean-basic', '基础' + name, 'clean', 'clean', [type], 0, 8, 5,
+    product(type + '-clean-basic', '基础' + name, 'clean', 'clean', [type], 0, 15, 5,
       [0, 35, 0, 0], '基础' + name + '，一次照料洁净度 +35。' + cleanHint);
-    product(type + '-clean', '舒适' + name, 'clean', 'clean', [type], 0, 10, 5,
+    product(type + '-clean', '舒适' + name, 'clean', 'clean', [type], 0, 18, 5,
       [0, 45, 0, 0], '舒适' + name + '，一次照料洁净度 +45。旧存档中的同名物资即本档。' + cleanHint);
-    product(type + '-clean-plus', '优质' + name, 'clean', 'clean', [type], 0, 16, 5,
+    product(type + '-clean-plus', '优质' + name, 'clean', 'clean', [type], 0, 24, 5,
       [0, 55, 0, 0], '优质' + name + '，一次照料洁净度 +55。' + cleanHint);
     product(type + '-nutrition', profiles[type].kind + '营养均衡主食组合', 'leaf', 'nutrition',
-      [type], 2, 16, 3, [50, 0, 0, 15],
+      [type], 2, 18, 3, [50, 0, 0, 15],
       '每份含当前适龄完整主食与普通营养食品，可作为一餐；增加游戏饱腹与精力属性，无医疗用途。');
     product(type + '-toy', profiles[type].kind + '玩具', 'heart', 'comfort',
       [type], 0, 12, 3, [0, 0, 45, 0], '一次陪玩消耗一份玩具使用次数。');
   }
-  product('plant-milk', '植物营养液', 'bottle', 'food', ['plant'], 0, 10, 5,
+  product('plant-milk', '植物营养液', 'bottle', 'food', ['plant'], 0, 20, 5,
     [0, 0, 0, 45], '萌芽期专用营养液，稀释后施入盆土。');
   for (let i = 1; i < 4; i++) {
     product('plant-food-' + i, profiles.plant.kind + stageLabels.plant[i] + '期花肥', 'bag', 'food',
-      ['plant'], i, 12 + i * 2, 5, [0, 0, 0, 45], '与当前成长阶段匹配的日常花肥，一次施肥养分 +45。');
+      ['plant'], i, 20 + i * 2, 5, [0, 0, 0, 45], '与当前成长阶段匹配的日常花肥，一次施肥养分 +45。');
     product('plant-food-' + i + '-plus', profiles.plant.kind + stageLabels.plant[i] + '期优质花肥', 'bag', 'food',
-      ['plant'], i, 18 + i * 2, 5, [0, 0, 0, 55],
+      ['plant'], i, 26 + i * 2, 5, [0, 0, 0, 55],
       '优质花肥，一次施肥养分 +55。档位差为游戏模拟，现实养护请咨询园艺专业人士。');
   }
-  product('plant-clean-basic', '基础叶面喷雾', 'clean', 'clean', ['plant'], 0, 8, 5,
+  product('plant-clean-basic', '基础叶面喷雾', 'clean', 'clean', ['plant'], 0, 15, 5,
     [0, 35, 0, 0], '基础叶喷，一次擦叶洁净度 +35。' + cleanHint);
-  product('plant-clean', '舒适叶面喷雾', 'clean', 'clean', ['plant'], 0, 10, 5,
+  product('plant-clean', '舒适叶面喷雾', 'clean', 'clean', ['plant'], 0, 18, 5,
     [0, 45, 0, 0], '舒适叶喷，一次擦叶洁净度 +45。旧存档中的同名物资即本档。' + cleanHint);
-  product('plant-clean-plus', '优质叶面喷雾', 'clean', 'clean', ['plant'], 0, 16, 5,
+  product('plant-clean-plus', '优质叶面喷雾', 'clean', 'clean', ['plant'], 0, 24, 5,
     [0, 55, 0, 0], '优质叶喷，一次擦叶洁净度 +55。' + cleanHint);
-  product('plant-nutrition', '植物营养均衡组合', 'leaf', 'nutrition', ['plant'], 2, 16, 3,
+  product('plant-nutrition', '植物营养均衡组合', 'leaf', 'nutrition', ['plant'], 2, 18, 3,
     [15, 0, 0, 50], '每份含适龄花肥与营养液，可作为一次完整施肥。');
   product('plant-toy', '植物陪伴小风铃', 'heart', 'comfort', ['plant'], 0, 12, 3,
     [0, 0, 45, 0], '晒太阳时挂在盆边，叮咚作响陪它度过一段时光。');
@@ -182,6 +182,27 @@
         [type], [0, 1, 2, 3][i], [30, 45, 60, 80][i], 1, [0, 0, 0, 0], name + '：' + detail + '。可在房间为' + profiles[type].name + '穿上。');
     });
   }
+  // Prices live in a mutable table so operators can override them globally
+  // (data/site-config.json -> prices). Catalog items expose price via getter,
+  // so the rest of the engine and UI keep reading `item.price` unchanged.
+  const BASE_PRICES = {};
+  const PRICE_STATE = {};
+  for (const item of catalog) {
+    BASE_PRICES[item.id] = item.price;
+    PRICE_STATE[item.id] = item.price;
+    Object.defineProperty(item, 'price', {
+      get() { return PRICE_STATE[item.id]; }, enumerable: true, configurable: true
+    });
+  }
+  function applyPriceOverrides(map) {
+    for (const item of catalog) {
+      const base = BASE_PRICES[item.id];
+      const raw = (map && own(map, item.id)) ? map[item.id] : base;
+      PRICE_STATE[item.id] = (Number.isSafeInteger(raw) && raw >= 1 && raw <= 1000000) ? raw : base;
+    }
+  }
+  function basePrices() { return { ...BASE_PRICES }; }
+
   function freeze(value) {
     Object.values(value).forEach(v => { if (v && typeof v === 'object') freeze(v); });
     return Object.freeze(value);
@@ -1018,6 +1039,7 @@
     vigilStatus, claimVigil, dailyTasks, markKnowledgeTask, VIGIL_SECONDS,
     completeDailyTask: rewardDailyTask,
     nannyStart, nannyStop, nannyPause, nannyCharge, NANNY_RATE,
+    applyPriceOverrides, basePrices,
     remedy, restart, healthTier, configureNight, configurePace, criticalRemaining, petName, nanny,
     accessorySlot, isEquipped, careQuantityCap, dye, DYE, STAGES,
     moments, scheduleMoment, startMoment, resolveMoment });

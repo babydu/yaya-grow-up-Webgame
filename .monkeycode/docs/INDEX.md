@@ -31,7 +31,9 @@ node browser.test.cjs
 app.js 与 test.cjs 为保留的第一版实现，当前页面使用 v2 模块。新增方案位于 .monkeycode/specs/lifelike-care-v2/、ambient-bgm/、background-care/、bgm-now-playing/、design-pack-integration/、health-sickness-system/、realistic-care-quality/、plant-fertilize-nutrients/、care-pace/、short-moments/、backpack-accessory-fix/、care-knowledge/、custom-pet-name/、day-texture-dual-slots/、critical-lock-health-yield/、accessory-dye-variants/、moment-return-popup/、nanny-care/。
 
 **贴心管家托管费（新增）**：开启托管后按真实时间扣积分，约 **10 分/小时**（`engine.js` 常量 `NANNY_RATE`）；托管完成的照护**不产生照护积分、不触发每日小任务**，库存不足仍按双倍价代购，积分不足以维持时会自动停止并提示。
-平衡核算（以猫咪为例）：手动一天约 签到 14 + 照护 30（6 次）+ 小任务 12 = 56 收入，物资消耗约 24，净盈余约 **+30/天**（去向外观摩同等长期目标）；全程托管 24 小时需约 240 分且无照护积分，远超日常收入，会很快因积分不足自动停止，从而**引导亲自喂养**。签到与亲自照护是主要来源，托管是额外开销。
+物品价格（默认，可后台覆盖）：奶粉 20/5 份、主食 22–26/5 份、清洁 15/18/24 三档/5 份、营养组合 18/3 份、玩具 12/3 份；医疗（药箱 25、灵药 60）与饰物（30/45/60/80）暂不变。
+平衡核算（以猫咪为例）：手动一天约 签到 14 + 照护 30（6 次）+ 小任务 12 = 56 收入，物资消耗约 **35–40**（奶粉+猫砂，单份约 3.6–5），净盈余约 **+15–20/天**（略高于消耗，去向外观等长期目标）；全程托管 24 小时需约 240 分且无照护积分、双倍代购，远超日常收入，会很快因积分不足自动停止，从而**引导亲自喂养**。
+价格与托管费率支持后台配置：`data/site-config.json` 的 `prices` 覆盖表（按整包价格），后台「物品价格」可逐项修改并「恢复默认价格」，发布后全站生效。
 紧急补足仅保留「守夜求援」：病危、无灵药、积分不足时开放（每日一次）；后续把付费 / 看广告作为最后兜底（未上线）。上述数值为可调参数（托管费率、任务奖励、照护上限）。
 
 ## 运营、广告与部署

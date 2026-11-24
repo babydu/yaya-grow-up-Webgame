@@ -63,6 +63,12 @@
           </section>
 
           <section class="ops-sec">
+            <h3>物品价格</h3>
+            <p class="ops-hint">单位：积分 / 整包（一次购买的数量）。留空或等于默认值即使用默认价格。改完点「发布」或「预览」。</p>
+            <div id="ops-prices" class="ops-prices"></div>
+            <button type="button" class="ops-chip" id="ops-prices-reset">恢复默认价格</button>
+          </section>
+          <section class="ops-sec">
             <h3>站点文案</h3>
             <label class="ops-field"><span>页脚补充说明</span><textarea id="ops-footerNote" rows="2" placeholder="例如：本站由 XXX 支持"></textarea></label>
           </section>
@@ -120,6 +126,36 @@
     c.textContent = S.hasRemote() ? '已连接全局配置' : '纯静态：用导出方式';
   }
 
+  const PRICE_CATS = [
+    ['food', '食物 / 花肥'], ['clean', '清洁护理'], ['nutrition', '营养组合'],
+    ['comfort', '陪伴玩具'], ['medical', '医疗'], ['accessory', '随身饰物']
+  ];
+  function priceGroupLabel(cat) {
+    const hit = PRICE_CATS.find(x => x[0] === cat);
+    return hit ? hit[1] : cat;
+  }
+  function renderPrices() {
+    const box = $ops('#ops-prices');
+    if (!box || !window.GameEngine) return;
+    const catalog = window.GameEngine.catalog || [];
+    const base = window.GameEngine.basePrices ? window.GameEngine.basePrices() : {};
+    const over = draft.prices || {};
+    const groups = PRICE_CATS.map(([cat]) => [cat, catalog.filter(p => p.category === cat)]).filter(([, items]) => items.length);
+    if (!groups.length) { box.innerHTML = '<p class="ops-empty">当前角色没有可调价的物品。</p>'; return; }
+    box.innerHTML = groups.map(([cat, items]) => {
+      const rows = items.map(p => {
+        const def = base[p.id] != null ? base[p.id] : p.price;
+        const cur = over[p.id] != null ? over[p.id] : def;
+        const unit = p.pack ? (cur / p.pack).toFixed(1) : cur;
+        return `<div class="ops-price-row" data-def="${def}">
+          <span class="ops-price-name">${p.name}</span>
+          <input type="number" min="1" max="1000000" step="1" data-price-id="${p.id}" value="${cur}">
+          <span class="ops-price-meta">默认 ${def} · 单份 ≈ ${unit}</span>
+        </div>`;
+      }).join('');
+      return `<div class="ops-price-group"><h4>${priceGroupLabel(cat)}</h4>${rows}</div>`;
+    }).join('');
+  }
   function renderEditor() {
     const a = draft.announcement || {};
     $ops('#ops-an-on').checked = !!a.enabled;
@@ -134,6 +170,7 @@
     $ops('#ops-ads').innerHTML = draft.ads.items.length ? draft.ads.items.map(adRow).join('') : '<p class="ops-empty">还没有广告。用上面的快捷按钮添加。</p>';
     $ops('#ops-json').value = JSON.stringify({ site: draft.site, ads: draft.ads, announcement: draft.announcement }, null, 2);
     try { $ops('#ops-secret').value = sessionStorage.getItem('ops-write-token') || ''; } catch (_) { /* ignore */ }
+    renderPrices();
     renderConn();
   }
 
@@ -166,6 +203,14 @@
       item.link = row.querySelector('[data-f="link"]').value.trim();
     });
     draft.ads.items = draft.ads.items.map(S.normalizeAd).filter(Boolean);
+    const prices = {};
+    root.querySelectorAll('[data-price-id]').forEach(inp => {
+      const id = inp.getAttribute('data-price-id');
+      const def = Number(inp.closest('.ops-price-row').getAttribute('data-def'));
+      const v = Number(inp.value);
+      if (Number.isSafeInteger(v) && v >= 1 && v !== def) prices[id] = v;
+    });
+    draft.prices = prices;
   }
   function reorder(i, dir) {
     syncDraft();
@@ -194,7 +239,7 @@
 
   async function publish() {
     syncDraft();
-    const payload = { site: draft.site, ads: draft.ads, announcement: draft.announcement };
+    const payload = { site: draft.site, ads: draft.ads, announcement: draft.announcement, prices: draft.prices || {} };
     const secretEl = $ops('#ops-secret');
     const secret = (secretEl && secretEl.value.trim()) || token;
     try { sessionStorage.setItem('ops-write-token', (secretEl && secretEl.value.trim()) || ''); } catch (_) { /* ignore */ }
@@ -209,6 +254,7 @@
   document.addEventListener('click', e => {
     const t = e.target;
     if (t.closest('#ops-close')) { close(); return; }
+    if (t.closest('#ops-prices-reset')) { syncDraft(); draft.prices = {}; renderPrices(); note('已恢复默认价格（点“预览”或“发布”生效）。'); return; }
     if (t.closest('#ops-add')) { syncDraft(); draft.ads.items.push({ id: 'ad-' + Math.random().toString(36).slice(2, 8), slot: 'bottom', text: '', link: '', enabled: true }); renderEditor(); return; }
     if (t.closest('#ops-preset-top')) { syncDraft(); draft.ads.items.push({ ...PRESET_TOP, id: 'ad-' + Math.random().toString(36).slice(2, 8) }); renderEditor(); return; }
     if (t.closest('#ops-preset-bottom')) { syncDraft(); draft.ads.items.push({ ...PRESET_BOTTOM, id: 'ad-' + Math.random().toString(36).slice(2, 8) }); renderEditor(); return; }
@@ -229,7 +275,7 @@
       return;
     }
     if (t.closest('#ops-applyjson')) {
-      try { draft = JSON.parse($ops('#ops-json').value); S.BASE && (draft.site = draft.site || { footerNote: '' }); draft.ads = draft.ads || { topEnabled: true, bottomEnabled: true, items: [] }; draft.announcement = draft.announcement || { enabled: false, version: 0, title: '', body: '', link: '', ticker: true, modal: true }; }
+      try { draft = JSON.parse($ops('#ops-json').value); S.BASE && (draft.site = draft.site || { footerNote: '' }); draft.ads = draft.ads || { topEnabled: true, bottomEnabled: true, items: [] }; draft.announcement = draft.announcement || { enabled: false, version: 0, title: '', body: '', link: '', ticker: true, modal: true }; draft.prices = draft.prices || {}; }
       catch (_) { note('JSON 有误。'); return; }
       renderEditor(); note('已载入到编辑器，点「发布」或「预览」生效。'); return;
     }
