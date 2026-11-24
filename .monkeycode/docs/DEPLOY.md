@@ -58,7 +58,8 @@
 
 ## 七、安全说明
 
-- `adminToken` 是「隐藏入口标识」，会出现在 `config.js` 中；它只用于：①浏览器判断是否打开后台；②服务端校验 `POST /api/site-config` 的 `x-admin-token`。请改成足够随机的串，并让服务端 `OPS_TOKEN` 与之一致。
+- `adminToken`（`config.js`）是「隐藏入口标识」，用于浏览器判断是否打开后台；它公开可见，**只做隐蔽、不是真正的鉴权**。
+- 服务端写入由 `OPS_TOKEN` 校验 `POST /api/site-config` 的 `x-admin-token`：若服务器设置了 `OPS_TOKEN`（建议与 `adminToken` 不同、且足够随机），后台「运维写入密钥」需填入同一串；未设置 `OPS_TOKEN` 时回退用 `config.js` 的 `adminToken`（仅适合内网/临时）。
 - 带后端时，只有持有 token 才能写入全局配置；不带 token 的写入返回 401。服务端拒绝越权、限制 body 大小、原子写入、屏蔽 `/server.js` 与点文件。
 - 纯静态部署没有写接口，后台只能导出 JSON 由你替换文件——不存在被匿名篡改全局配置的入口。
 - 不要把任何真实口令/第三方密钥放进 `config.js` 或 `data/site-config.json`；它们对访客可见。

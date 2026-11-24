@@ -60,9 +60,15 @@ test('site-config API: public read, token-guarded global write that persists', a
     });
     assert.equal(r.status, 401);
 
-    // Static serving works; server source is not exposed.
+    // Static serving works; server source and test files are not exposed.
     r = await fetch(base + '/'); assert.equal(r.status, 200);
     r = await fetch(base + '/server.js'); assert.equal(r.status, 404);
+    r = await fetch(base + '/server.test.cjs'); assert.equal(r.status, 404);
+    // Path traversal attempts are refused (never 200).
+    for (const bad of ['/%2e%2e/%2e%2e/etc/passwd', '/..%2f..%2fetc%2fpasswd', '/../etc/passwd']) {
+      r = await fetch(base + bad);
+      assert.ok(r.status === 403 || r.status === 404, 'traversal blocked: ' + bad + ' -> ' + r.status);
+    }
   } finally {
     await new Promise(resolve => server.close(resolve));
     if (backup !== null) fs.writeFileSync(CONFIG_FILE, backup);

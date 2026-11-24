@@ -87,12 +87,15 @@ function send(res, status, type, body) {
 function serveStatic(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath.split('?')[0]);
   if (rel === '/' || rel === '') rel = '/index.html';
-  // Block server source, dotfiles and the git dir from being served.
-  if (rel === '/server.js' || rel.startsWith('/.') || rel.startsWith('/.git')) {
+  // Block server source, test files, dotfiles and the git dir from being served.
+  if (rel === '/server.js' || /\.test\.cjs$/i.test(rel) || rel.startsWith('/.') || rel.startsWith('/.git')) {
     return send(res, 404, 'text/plain; charset=utf-8', 'Not found');
   }
   const filePath = path.normalize(path.join(ROOT, rel));
-  if (!filePath.startsWith(ROOT)) return send(res, 403, 'text/plain; charset=utf-8', 'Forbidden');
+  // Guard against sibling-prefix traversal (e.g. /workspace_evil vs /workspace).
+  if (filePath !== ROOT && !filePath.startsWith(ROOT + path.sep)) {
+    return send(res, 403, 'text/plain; charset=utf-8', 'Forbidden');
+  }
   fs.stat(filePath, (err, st) => {
     if (err || !st.isFile()) return send(res, 404, 'text/plain; charset=utf-8', 'Not found');
     const ext = path.extname(filePath).toLowerCase();

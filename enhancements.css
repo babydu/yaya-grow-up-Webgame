@@ -251,7 +251,7 @@
 .ops-ad{border:1px solid #e9ece3;border-radius:10px;padding:12px;background:#fff;display:flex;flex-direction:column;gap:8px}
 .ops-ad-grid{display:flex;gap:10px;align-items:flex-end}
 .ops-field{display:flex;flex-direction:column;gap:4px;font-size:11px;color:#8a927e;flex:1}
-.ops-field input[type=text],.ops-field select,.ops-field textarea{border:1px solid #dbe3cd;border-radius:7px;padding:8px 10px;font:inherit;font-size:12px;background:#f7f9f1;color:#5d6b52;width:100%;box-sizing:border-box}
+.ops-field input[type=text],.ops-field input[type=password],.ops-field select,.ops-field textarea{border:1px solid #dbe3cd;border-radius:7px;padding:8px 10px;font:inherit;font-size:12px;background:#f7f9f1;color:#5d6b52;width:100%;box-sizing:border-box}
 .ops-ad-grid .ops-field:last-child{flex:0 0 auto}
 .ops-ad-foot{display:flex;justify-content:space-between;align-items:center;margin-top:2px}
 .ops-id{font-size:10px;color:#a3ab95;font-family:ui-monospace,monospace}
@@ -274,7 +274,7 @@
 .notice-close{flex:none;width:24px;height:24px;border-radius:6px;color:#b08a5e;font-size:16px;line-height:1;display:grid;place-items:center}
 .notice-close:hover{background:#f6ecd9}
 @keyframes notice-marquee{from{transform:translateX(100%)}to{transform:translateX(-100%)}}
-@media(prefers-reduced-motion:reduce){.notice-scroll-text{animation:none}}
+@media(prefers-reduced-motion:reduce){.notice-scroll-text{animation:none;white-space:normal}.notice-scroll{white-space:normal}}
 @media(max-width:900px){.notice-ticker{padding:7px 16px}}
 .btn-link{display:inline-block;margin-top:10px;margin-right:12px;color:#6a8154;text-decoration:underline;font-size:12px}
 

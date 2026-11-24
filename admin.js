@@ -69,6 +69,7 @@
 
           <section class="ops-sec">
             <h3>发布</h3>
+            <label class="ops-field"><span>运维写入密钥（服务器 OPS_TOKEN；留空则用入口 token）</span><input type="password" id="ops-secret" autocomplete="off" placeholder="若服务器设置了 OPS_TOKEN，请在此填入"></label>
             <div class="ops-actions">
               <button type="button" id="ops-publish" class="ops-primary">发布到服务器（全站生效）</button>
               <button type="button" id="ops-preview">本机预览</button>
@@ -79,7 +80,7 @@
               <button type="button" id="ops-clearDismissed">恢复被关闭的广告</button>
               <button type="button" id="ops-reset">清空为默认并预览</button>
             </div>
-            <p class="ops-hint" id="ops-note">「发布到服务器」会把配置写入服务器上的 data/site-config.json，所有访客生效；若为纯静态部署（无 server.js），请用「导出」替换该文件后重新部署。</p>
+            <p class="ops-hint" id="ops-note">「发布到服务器」会把配置写入服务器上的 data/site-config.json，所有访客生效。生产环境建议在服务器设置 OPS_TOKEN 并在此填入同一密钥（入口 token 仅用于隐藏面板）。纯静态部署（无 server.js）请用「导出」替换该文件后重新部署。</p>
             <details class="ops-details"><summary>高级：编辑原始 JSON</summary>
               <textarea id="ops-json" class="ops-json" spellcheck="false"></textarea>
               <button type="button" id="ops-applyjson" class="ops-chip">从 JSON 载入到编辑器</button>
@@ -132,6 +133,7 @@
     $ops('#ops-footerNote').value = draft.site.footerNote || '';
     $ops('#ops-ads').innerHTML = draft.ads.items.length ? draft.ads.items.map(adRow).join('') : '<p class="ops-empty">还没有广告。用上面的快捷按钮添加。</p>';
     $ops('#ops-json').value = JSON.stringify({ site: draft.site, ads: draft.ads, announcement: draft.announcement }, null, 2);
+    try { $ops('#ops-secret').value = sessionStorage.getItem('ops-write-token') || ''; } catch (_) { /* ignore */ }
     renderConn();
   }
 
@@ -193,9 +195,12 @@
   async function publish() {
     syncDraft();
     const payload = { site: draft.site, ads: draft.ads, announcement: draft.announcement };
-    if (!token) { note('请用带 #ops=密钥 的地址打开后台。'); return; }
+    const secretEl = $ops('#ops-secret');
+    const secret = (secretEl && secretEl.value.trim()) || token;
+    try { sessionStorage.setItem('ops-write-token', (secretEl && secretEl.value.trim()) || ''); } catch (_) { /* ignore */ }
+    if (!secret) { note('请用带 #ops=密钥 的地址打开后台，或填写运维写入密钥。'); return; }
     note('正在发布到服务器…');
-    const res = await S.save(payload, token);
+    const res = await S.save(payload, secret);
     if (res.ok) { draft = JSON.parse(JSON.stringify(S.getConfig())); renderEditor(); note('已发布，全站访客生效。'); }
     else if (res.error === 'unauthorized') { note('密钥不正确，服务器拒绝了写入。'); }
     else { note('无法写入服务器（可能是纯静态部署）。请改用「导出 data/site-config.json」并替换部署。'); }

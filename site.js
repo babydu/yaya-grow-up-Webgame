@@ -24,11 +24,9 @@
     if (!a || typeof a !== 'object') return null;
     const text = typeof a.text === 'string' ? a.text.slice(0, 200) : '';
     if (!text) return null;
-    let link = typeof a.link === 'string' ? a.link.trim() : '';
-    if (link && !/^https?:\/\//i.test(link) && link[0] !== '/') link = '';
     return {
       id: a.id ? String(a.id) : 'ad-' + Math.random().toString(36).slice(2, 8),
-      slot: a.slot === 'top' ? 'top' : 'bottom', text, link, enabled: a.enabled !== false
+      slot: a.slot === 'top' ? 'top' : 'bottom', text, link: safeLink(a.link), enabled: a.enabled !== false
     };
   }
   function merge(base, extra) {
@@ -51,6 +49,7 @@
   let readyPromise = null;
   let previewCfg = null;  // transient local preview set by the ops panel
   const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const safeLink = u => { const s = String(u == null ? '' : u).trim(); return (/^https?:\/\//i.test(s) || s[0] === '/') ? s : ''; };
   const lsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (_) { return d; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) { /* ignore */ } };
 
@@ -76,7 +75,8 @@
   function clearDismissed() { try { localStorage.removeItem(DISMISS); } catch (_) { /* ignore */ } renderAds(); }
   function adBody(a) {
     const t = esc(a.text);
-    return a.link ? `<a class="ad-link" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">${t}</a>` : `<span class="ad-text">${t}</span>`;
+    const href = safeLink(a.link);
+    return href ? `<a class="ad-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${t}</a>` : `<span class="ad-text">${t}</span>`;
   }
   function renderSlot(nodeId, slot, enabled) {
     const node = document.getElementById(nodeId);
@@ -104,7 +104,7 @@
   function announce() {
     const a = getConfig().announcement || {};
     const hasText = (a.title && a.title.trim()) || (a.body && a.body.trim());
-    return (a.enabled && hasText) ? a : null;
+    return (a.enabled && hasText) ? { ...a, link: safeLink(a.link) } : null;
   }
   function renderTicker() {
     const node = document.getElementById('notice-ticker');
@@ -113,7 +113,8 @@
     if (!a || a.ticker === false) { node.hidden = true; node.innerHTML = ''; return; }
     if (lsGet(TICKER_OFF, null) === a.version) { node.hidden = true; node.innerHTML = ''; return; }
     const line = (a.title ? a.title : '') + (a.body ? (a.title ? ' · ' : '') + a.body : '');
-    const inner = a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">${esc(line)}</a>` : `<span>${esc(line)}</span>`;
+    const href = safeLink(a.link);
+    const inner = href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(line)}</a>` : `<span>${esc(line)}</span>`;
     node.hidden = false;
     node.innerHTML = `<span class="notice-tag">公告</span><div class="notice-scroll"><div class="notice-scroll-text">${inner}</div></div><button class="notice-close" type="button" id="notice-ticker-close" aria-label="关闭公告">×</button>`;
   }
@@ -123,7 +124,8 @@
     if (!dlg || !a || a.modal === false) return;
     if (lsGet(SEEN, null) === a.version) return;
     const body = a.body ? `<p>${esc(a.body)}</p>` : '';
-    const link = a.link ? `<a class="btn-link" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">了解更多</a>` : '';
+    const alink = safeLink(a.link);
+    const link = alink ? `<a class="btn-link" href="${esc(alink)}" target="_blank" rel="noopener noreferrer">了解更多</a>` : '';
     document.getElementById('notice-content').innerHTML =
       `<div class="dialog-icon">${window.GameVisuals ? window.GameVisuals.icon('bell') : ''}</div>` +
       `<div class="eyebrow">A NOTE FOR YOU</div><h2 id="notice-title">${esc(a.title || '公告')}</h2>${body}${link}` +
@@ -168,7 +170,9 @@
       if (!r.ok) return { ok: false, error: 'http-' + r.status };
       remote = merge(BASE, payload);
       previewCfg = null;
-      renderAll();
+      // Re-read what the server actually stored (it sanitises/clamps input).
+      readyPromise = null;
+      await load();
       return { ok: true };
     }).catch(() => ({ ok: false, error: 'network' }));
   }
