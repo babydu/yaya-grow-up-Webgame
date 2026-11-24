@@ -1311,7 +1311,7 @@ test('nanny restocks at double price and blocks without points', () => {
   const r = G.nanny(s, NOW);
   assert.equal(r.cared.length, 1);
   assert.equal(s.inventory['cat-milk'], 3);
-  assert.equal(s.points, 45);
+  assert.equal(s.points, 40); // double-price restock (20) with no care-point reward
   assert.ok(s.logs.some(l => l.text.includes('贴心管家按双倍价格代购了')));
 
   const t = pet();
@@ -1332,10 +1332,10 @@ test('nanny restocks at double price and blocks without points', () => {
   const r3 = G.nanny(single, NOW);
   assert.equal(r3.cared.length, 1);
   assert.equal(single.inventory['cat-milk'], 4);
-  assert.equal(single.points, 985);
+  assert.equal(single.points, 980); // restock 20, no care points
 });
 
-test('nanny matches manual care yield while consuming exactly double stock', () => {
+test('nanny matches needs/xp/bond but earns no care points', () => {
   const manual = pet();
   manual.needs = [20, 100, 100, 100];
   manual.lastCare = { food: NOW - 60000 };
@@ -1352,7 +1352,8 @@ test('nanny matches manual care yield while consuming exactly double stock', () 
   assert.deepEqual(nanny.needs.map(Math.round), manual.needs.map(Math.round));
   assert.equal(nanny.xp, manual.xp);
   assert.equal(Math.round(nanny.bond), Math.round(manual.bond));
-  assert.equal(nanny.points, manual.points);
+  // Care yield (needs/xp/bond) matches manual, but the nanny earns no points.
+  assert.equal(nanny.points, manual.points - 5);
   assert.equal(manual.inventory['cat-milk'], 3);
   assert.equal(nanny.inventory['cat-milk'], 2);
 });
@@ -1389,7 +1390,7 @@ test('nanny trigger thresholds and guards', () => {
   const r3 = G.nanny(w, NOW);
   assert.equal(r3.cared.length, 1);
   assert.equal(JSON.stringify(w.inventory), before);
-  assert.equal(w.points, pointsBefore + 5);
+  assert.equal(w.points, pointsBefore); // nanny care does not add points
 });
 
 test('departed pets reject both medicines with a gentle hint', () => {
@@ -1489,4 +1490,44 @@ test('vigil safety net tops up to the elixir price only when truly stuck', () =>
   // Not critical: unavailable.
   const h = pet();
   assert.equal(G.vigilStatus(h).available, false);
+});
+
+test('nanny babysitting fee: charges per hour, pauses when off, stops when broke', () => {
+  const s = pet();
+  s.points = 100;
+  G.nannyStart(s, NOW);
+  assert.equal(G.nannyCharge(s, NOW + 30 * 60000).charged, 5); // 10 / hour => 5 per half hour
+  assert.equal(s.points, 95);
+  assert.equal(G.nannyCharge(s, NOW + 60 * 60000).charged, 5); // another half hour
+  assert.equal(s.points, 90);
+  // While stopped, the clock does not accrue.
+  G.nannyStop(s);
+  assert.equal(G.nannyCharge(s, NOW + 120 * 60000).charged, 0);
+  assert.equal(s.points, 90);
+  // Restart accrues only from now, not the off gap.
+  G.nannyStart(s, NOW + 120 * 60000);
+  assert.equal(G.nannyCharge(s, NOW + 180 * 60000).charged, 10);
+  assert.equal(s.points, 80);
+  // Pause (e.g. a manual task is running) skips ahead without charging.
+  G.nannyPause(s, NOW + 240 * 60000);
+  assert.equal(G.nannyCharge(s, NOW + 240 * 60000).charged, 0);
+  // Broke: pay only what remains, then stop.
+  s.points = 3;
+  const r = G.nannyCharge(s, NOW + 300 * 60000);
+  assert.equal(r.insufficient, true);
+  assert.equal(s.points, 0);
+  assert.equal(s.nannyAt, null);
+});
+
+test('nanny care does not add points or fill the daily care cap', () => {
+  const s = pet();
+  s.needs = [20, 100, 100, 100];
+  s.lastCare = { food: NOW - 60000 };
+  s.inventory['cat-milk'] = 4;
+  s.daily.earned = 0;
+  const before = s.points;
+  const r = G.nanny(s, NOW);
+  assert.equal(r.cared.length, 1);
+  assert.equal(s.points, before); // no care points from the nanny
+  assert.equal(s.daily.earned, 0);
 });

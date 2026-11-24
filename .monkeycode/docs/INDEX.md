@@ -30,5 +30,9 @@ node browser.test.cjs
 ## 版本
 app.js 与 test.cjs 为保留的第一版实现，当前页面使用 v2 模块。新增方案位于 .monkeycode/specs/lifelike-care-v2/、ambient-bgm/、background-care/、bgm-now-playing/、design-pack-integration/、health-sickness-system/、realistic-care-quality/、plant-fertilize-nutrients/、care-pace/、short-moments/、backpack-accessory-fix/、care-knowledge/、custom-pet-name/、day-texture-dual-slots/、critical-lock-health-yield/、accessory-dye-variants/、moment-return-popup/、nanny-care/。
 
+**贴心管家托管费（新增）**：开启托管后按真实时间扣积分，约 **10 分/小时**（`engine.js` 常量 `NANNY_RATE`）；托管完成的照护**不产生照护积分、不触发每日小任务**，库存不足仍按双倍价代购，积分不足以维持时会自动停止并提示。
+平衡核算（以猫咪为例）：手动一天约 签到 14 + 照护 30（6 次）+ 小任务 12 = 56 收入，物资消耗约 24，净盈余约 **+30/天**（去向外观摩同等长期目标）；全程托管 24 小时需约 240 分且无照护积分，远超日常收入，会很快因积分不足自动停止，从而**引导亲自喂养**。签到与亲自照护是主要来源，托管是额外开销。
+紧急补足仅保留「守夜求援」：病危、无灵药、积分不足时开放（每日一次）；后续把付费 / 看广告作为最后兜底（未上线）。上述数值为可调参数（托管费率、任务奖励、照护上限）。
+
 ## 运营、广告与部署
 全局运营配置存于 `data/site-config.json`（广告、公告、页脚），由前端 `site.js` 读取，**对所有访客生效**；访客本机仅保存「已关闭广告 / 已读公告」的个人状态。`admin.js` 提供**无可见按钮**的隐藏后台，入口 `#ops=<adminToken>`（token 在 `config.js`），可发布公告（顶部滚动条 / 进入弹窗）、管理广告、发布到服务器或导出 JSON。带后端时运行 `node server.js`（`PORT`/`OPS_TOKEN`）提供 `POST /api/site-config` 实时写入；纯静态部署用「导出 JSON」替换该文件。详见 `.monkeycode/docs/DEPLOY.md`。

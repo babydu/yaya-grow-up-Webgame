@@ -438,6 +438,15 @@ const assert = require('node:assert/strict');
     assert.equal(nannyRun.delta, 2);
     assert.ok(nannyRun.need > 40);
     assert.equal(nannyRun.task, null);
+    // Babysitting costs points by the hour even when nothing needs care.
+    const nannyFee = await page.evaluate(() => {
+      state.needs = [100, 100, 100, 100]; // nothing due, so only the fee applies
+      state.nannyAt = Date.now() - 3600000; // pretend an hour elapsed
+      const before = state.points;
+      runNanny();
+      return before - state.points;
+    });
+    assert.ok(nannyFee >= 9 && nannyFee <= 11, 'nanny hourly fee ~' + nannyFee);
     await page.locator('#nanny-chip').click();
     assert.equal(await page.evaluate(() => localStorage.getItem('slow-growing-nanny')), '0');
     assert.equal(await page.locator('#nanny-chip').isVisible(), false);

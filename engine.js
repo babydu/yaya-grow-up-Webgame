@@ -75,6 +75,7 @@
     plant: { name: '团子', kind: '小植物', description: '陪小植物团子从破土走到盛放。',
       rhythm: '安静养成，不会弹出短时小事件。' }
   };
+  const NANNY_RATE = 10; // points charged per real hour of nanny babysitting
   const MOMENT_MIN = 10 * 60 * 1000;
   const MOMENT_SPAN = 15 * 60 * 1000;
   const MOMENT_WINDOW = 10000;
@@ -419,7 +420,7 @@
       health: 100, status: 'alive', criticalAt: null, leftAt: null, name: null,
       daily: freshDaily(now),
       checkin: { date: '', streak: 0 }, reliefDate: '', stageIndex: 0, lastTouch: null,
-      momentDueAt: null, momentLastId: null };
+      momentDueAt: null, momentLastId: null, nannyAt: null, nannyDebt: 0 };
   }
   function eligibleStage(s) {
     if (s.status === 'left') return s.stageIndex;
@@ -445,23 +446,23 @@
     s.logs.push({ at: now, text });
     s.logs = s.logs.slice(-1000);
   }
-  function rewardStages(s, now) {
+  function rewardStages(s, now, skipPoints) {
     if (!s.adopted || s.status === 'left') return;
     const index = eligibleStage(s);
     while (s.stageIndex < index) {
       s.stageIndex++;
-      s.points = Math.min(LIMIT, s.points + 20);
-      log(s, now, `进入${stageName(s.selected, s.stageIndex)}，获得 20 积分。`);
+      if (!skipPoints) s.points = Math.min(LIMIT, s.points + 20);
+      log(s, now, `进入${stageName(s.selected, s.stageIndex)}${skipPoints ? '。' : '，获得 20 积分。'}`);
     }
   }
-  function rewardEmotions(s, now) {
+  function rewardEmotions(s, now, skipPoints) {
     if (!own(s, 'emotionalMilestones')) s.emotionalMilestones = [];
     if (!s.adopted || s.status === 'left') return;
     for (const threshold of [30, 65]) {
       if (s.bond < threshold || s.emotionalMilestones.includes(threshold)) continue;
       s.emotionalMilestones.push(threshold);
-      s.points = Math.min(LIMIT, s.points + 10);
-      log(s, now, `与${petName(s)}的亲密度首次达到 ${threshold}，${threshold === 30 ? '建立信任' : '亲密依恋'}，获得 10 积分。`);
+      if (!skipPoints) s.points = Math.min(LIMIT, s.points + 10);
+      log(s, now, `与${petName(s)}的亲密度首次达到 ${threshold}，${threshold === 30 ? '建立信任' : '亲密依恋'}${skipPoints ? '。' : '，获得 10 积分。'}`);
     }
   }
   function refresh(s, now) {
@@ -650,8 +651,9 @@
     if (s.progress) s.progress[index] = 0;
     return null;
   }
-  function advance(s, seconds, now) {
+  function advance(s, seconds, now, opts) {
     assert(number(seconds), '前台增量无效');
+    const noPoints = !!(opts && opts.noPoints);
     refresh(s, now);
     if (!s.task) return null;
     const t = s.task;
@@ -672,7 +674,7 @@
     s.daily.count = Math.min(s.count, s.daily.count + 1);
     s.lastCare[t.actionId] = now;
     s.task = null;
-    const points = effective ? Math.min(5, 40 - s.daily.earned, LIMIT - s.points) : 0;
+    const points = (effective && !noPoints) ? Math.min(5, 40 - s.daily.earned, LIMIT - s.points) : 0;
     const growth = effective ? (s.health < 40 ? 5 : 10) : 0;
     if (effective) {
       s.xp = Math.min(LIMIT, s.xp + growth);
@@ -682,10 +684,10 @@
     s.points += points;
     s.daily.earned += points;
     const label = units > 1 ? `${t.name} × ${units}` : t.name;
-    const message = `${label}完成，成长 +${growth}，积分 +${points}。`;
+    const message = noPoints ? `${label}完成，成长 +${growth}。` : `${label}完成，成长 +${growth}，积分 +${points}。`;
     log(s, now, message);
-    rewardStages(s, now);
-    rewardEmotions(s, now);
+    rewardStages(s, now, noPoints);
+    rewardEmotions(s, now, noPoints);
     return { title: '照护完成', message, points };
   }
   function checkin(s, now) {
@@ -809,6 +811,39 @@
     }
     return '商品无效';
   }
+  // Time-based babysitting fee: while the nanny is on, points trickle out by
+  // real hours (NANNY_RATE/hour). It uses a float debt counter so whole points
+  // are deducted only when a full point accrues, keeping points integral.
+  function nannyStart(s, now) {
+    if (!s.adopted || s.status === 'left') return;
+    if (s.nannyAt === null || s.nannyAt === undefined) s.nannyAt = now;
+  }
+  function nannyStop(s) { s.nannyAt = null; }
+  function nannyPause(s, now) { if (s.nannyAt !== null && s.nannyAt !== undefined) s.nannyAt = now; }
+  function nannyCharge(s, now) {
+    const rate = NANNY_RATE;
+    if (!s.adopted || s.status === 'left' || s.criticalAt !== null) {
+      s.nannyAt = null;
+      return { charged: 0, insufficient: false, rate };
+    }
+    if (s.nannyAt === null || s.nannyAt === undefined) { s.nannyAt = now; return { charged: 0, insufficient: false, rate }; }
+    let elapsed = now - s.nannyAt;
+    if (elapsed < 0) elapsed = 0;
+    s.nannyAt = now;
+    s.nannyDebt = (Number.isFinite(s.nannyDebt) ? s.nannyDebt : 0) + (elapsed / HOUR) * rate;
+    const whole = Math.floor(s.nannyDebt);
+    if (whole <= 0) return { charged: 0, insufficient: false, rate };
+    const pay = Math.min(whole, s.points);
+    s.points -= pay;
+    s.nannyDebt -= whole;
+    if (pay < whole) {
+      s.nannyDebt = 0;
+      s.nannyAt = null;
+      log(s, now, '积分不足以维持贴心管家，托管已停止。');
+      return { charged: pay, insufficient: true, rate };
+    }
+    return { charged: pay, insufficient: false, rate };
+  }
   function nanny(s, now) {
     const cared = [];
     let blocked = null;
@@ -840,7 +875,7 @@
       const err = begin(s, option.id, pid, now);
       if (err) { blocked = err; break; }
       if (pid !== null) s.inventory[pid] -= 1;
-      const result = advance(s, s.task.seconds, now);
+      const result = advance(s, s.task.seconds, now, { noPoints: true });
       cared.push({ name: option.name, message: result ? result.message : '' });
     }
     return { cared, blocked };
@@ -936,6 +971,8 @@
       if (s.momentLastId === undefined) s.momentLastId = null;
       if (s.health === undefined) s.health = 100;
       if (s.tints === undefined) s.tints = {};
+      if (s.nannyAt === undefined) s.nannyAt = null;
+      if (!Number.isFinite(s.nannyDebt)) s.nannyDebt = 0;
       ensureDaily(s);
       if (s.status === undefined) { s.status = 'alive'; s.criticalAt = null; s.leftAt = null; }
       // Older saves kept the critical-window rescue promise after departure.
@@ -980,6 +1017,7 @@
     products, begin, advance, checkin, buy, wear, relief, touch, milestones, careBlock,
     vigilStatus, claimVigil, dailyTasks, markKnowledgeTask, VIGIL_SECONDS,
     completeDailyTask: rewardDailyTask,
+    nannyStart, nannyStop, nannyPause, nannyCharge, NANNY_RATE,
     remedy, restart, healthTier, configureNight, configurePace, criticalRemaining, petName, nanny,
     accessorySlot, isEquipped, careQuantityCap, dye, DYE, STAGES,
     moments, scheduleMoment, startMoment, resolveMoment });
