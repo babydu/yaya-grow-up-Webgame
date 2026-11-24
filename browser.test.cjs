@@ -721,6 +721,34 @@ const assert = require('node:assert/strict');
     } finally {
       await ecoPage.close().catch(() => {});
     }
+    // Hidden ops panel + inline ad slots.
+    const opsPage = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+    try {
+      await opsPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await opsPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
+      assert.equal(await opsPage.locator('#ad-top').isHidden(), true);
+      assert.equal(await opsPage.locator('#ad-bottom').isHidden(), true);
+      // Opens only through the secret hash token; there is no visible button.
+      await opsPage.evaluate(() => { location.hash = 'ops=mkx7d2'; });
+      await opsPage.waitForTimeout(300);
+      assert.equal(await opsPage.locator('#ops-root').isVisible(), true);
+      await opsPage.locator('#ops-add').click();
+      await opsPage.locator('.ops-ad').last().locator('[data-f="text"]').fill('后台新增的公告');
+      await opsPage.locator('#ops-save').click();
+      await opsPage.locator('#ops-close').click();
+      assert.equal(await opsPage.locator('#ops-root').isHidden(), true);
+      await opsPage.waitForTimeout(150);
+      assert.equal(await opsPage.locator('#ad-bottom').isVisible(), true);
+      assert.match(await opsPage.locator('#ad-bottom').innerText(), /后台新增的公告/);
+      const adPos = await opsPage.locator('#ad-bottom').evaluate(el => getComputedStyle(el).position);
+      assert.equal(adPos, 'static');
+      await opsPage.locator('#ad-bottom [data-ad-close]').first().click();
+      assert.equal(await opsPage.locator('#ad-bottom').isHidden(), true);
+      await opsPage.evaluate(() => { window.Site.reset(); window.Site.clearDismissed(); });
+      await opsPage.close();
+    } finally {
+      await opsPage.close().catch(() => {});
+    }
   } finally {
       await nightPage.close().catch(() => {});
     }

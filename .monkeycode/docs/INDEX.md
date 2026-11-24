@@ -29,3 +29,6 @@ node browser.test.cjs
 
 ## 版本
 app.js 与 test.cjs 为保留的第一版实现，当前页面使用 v2 模块。新增方案位于 .monkeycode/specs/lifelike-care-v2/、ambient-bgm/、background-care/、bgm-now-playing/、design-pack-integration/、health-sickness-system/、realistic-care-quality/、plant-fertilize-nutrients/、care-pace/、short-moments/、backpack-accessory-fix/、care-knowledge/、custom-pet-name/、day-texture-dual-slots/、critical-lock-health-yield/、accessory-dye-variants/、moment-return-popup/、nanny-care/。
+
+## 运营、广告与部署
+站点配置在 `config.js`（`window.SITE_CONFIG`）：广告位（顶部条幅 / 底部卡片，均为文档流内、可关闭）、页脚补充、`adminToken`。模块：`site.js` 负责配置分层与广告渲染（默认无广告），`admin.js` 提供**无可见按钮**的隐藏后台，入口为 `#ops=<adminToken>`。隐藏后台仅写本浏览器 localStorage 用于预览；全站生效请用后台「导出 config.js」替换服务器文件后重新部署。部署方式、配置分层、升级与安全边界详见 `.monkeycode/docs/DEPLOY.md`。
