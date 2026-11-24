@@ -721,34 +721,69 @@ const assert = require('node:assert/strict');
     } finally {
       await ecoPage.close().catch(() => {});
     }
-    // Hidden ops panel + inline ad slots.
+    // Hidden ops panel + inline ad slots (local preview rendering).
     const opsPage = await browser.newPage({ viewport: { width: 1200, height: 900 } });
     try {
       await opsPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
       await opsPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
+      await opsPage.waitForTimeout(300);
       assert.equal(await opsPage.locator('#ad-top').isHidden(), true);
       assert.equal(await opsPage.locator('#ad-bottom').isHidden(), true);
-      // Opens only through the secret hash token; there is no visible button.
       await opsPage.evaluate(() => { location.hash = 'ops=mkx7d2'; });
       await opsPage.waitForTimeout(300);
       assert.equal(await opsPage.locator('#ops-root').isVisible(), true);
-      await opsPage.locator('#ops-add').click();
-      await opsPage.locator('.ops-ad').last().locator('[data-f="text"]').fill('后台新增的公告');
-      await opsPage.locator('#ops-save').click();
+      await opsPage.locator('#ops-preset-top').click();
+      await opsPage.locator('#ops-preview').click();
       await opsPage.locator('#ops-close').click();
       assert.equal(await opsPage.locator('#ops-root').isHidden(), true);
       await opsPage.waitForTimeout(150);
-      assert.equal(await opsPage.locator('#ad-bottom').isVisible(), true);
-      assert.match(await opsPage.locator('#ad-bottom').innerText(), /后台新增的公告/);
-      const adPos = await opsPage.locator('#ad-bottom').evaluate(el => getComputedStyle(el).position);
-      assert.equal(adPos, 'static');
-      await opsPage.locator('#ad-bottom [data-ad-close]').first().click();
-      assert.equal(await opsPage.locator('#ad-bottom').isHidden(), true);
-      await opsPage.evaluate(() => { window.Site.reset(); window.Site.clearDismissed(); });
+      assert.equal(await opsPage.locator('#ad-top').isVisible(), true);
+      assert.match(await opsPage.locator('#ad-top').innerText(), /全站公告/);
+      assert.equal(await opsPage.locator('#ad-top').evaluate(el => getComputedStyle(el).position), 'static');
+      await opsPage.locator('#ad-top [data-ad-close]').first().click();
+      assert.equal(await opsPage.locator('#ad-top').isHidden(), true);
+      await opsPage.evaluate(() => { window.Site.clearPreview(); window.Site.clearDismissed(); });
       await opsPage.close();
     } finally {
       await opsPage.close().catch(() => {});
     }
+
+    // Global config file -> every visitor sees the same ads + announcement.
+    const fsMod = require('node:fs');
+    const cfgPath = '/workspace/data/site-config.json';
+    const seedCfg = fsMod.readFileSync(cfgPath, 'utf8');
+    fsMod.writeFileSync(cfgPath, JSON.stringify({
+      site: { footerNote: '' },
+      ads: { topEnabled: true, bottomEnabled: true, items: [{ id: 'g-ad', slot: 'bottom', text: '全局赞助卡片', link: '', enabled: true }] },
+      announcement: { enabled: true, version: 99001, title: '全站公告标题', body: '全站公告正文', link: '', ticker: true, modal: true },
+      updatedAt: Date.now()
+    }, null, 2));
+    const noticeA = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+    try {
+      await noticeA.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await noticeA.locator('#adopt-dialog').waitFor({ state: 'visible' });
+      await noticeA.locator('#notice-dialog').waitFor({ state: 'visible', timeout: 6000 });
+      assert.match(await noticeA.locator('#notice-content').innerText(), /全站公告/);
+      assert.equal(await noticeA.locator('#notice-ticker').isVisible(), true);
+      assert.equal(await noticeA.locator('#ad-bottom').isVisible(), true);
+      assert.match(await noticeA.locator('#ad-bottom').innerText(), /全局赞助卡片/);
+      // Closing the modal marks this announcement seen for this visitor.
+      await noticeA.locator('#notice-ok').click();
+      await noticeA.reload({ waitUntil: 'domcontentloaded' });
+      await noticeA.waitForTimeout(500);
+      assert.equal(await noticeA.locator('#notice-dialog').isVisible(), false);
+      // A brand-new visitor (fresh browser context) sees the modal again.
+      const noticeB = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+      try {
+        await noticeB.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await noticeB.locator('#notice-dialog').waitFor({ state: 'visible', timeout: 6000 });
+        assert.match(await noticeB.locator('#notice-content').innerText(), /全站公告/);
+      } finally { await noticeB.close().catch(() => {}); }
+    } finally {
+      await noticeA.close().catch(() => {});
+      fsMod.writeFileSync(cfgPath, seedCfg);
+    }
+
   } finally {
       await nightPage.close().catch(() => {});
     }

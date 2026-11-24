@@ -263,3 +263,31 @@
 .ops-actions button{font-size:12px;background:#eef2e6;color:#5d6b52;border-radius:8px;padding:9px 12px}
 .ops-primary{background:#748666!important;color:#fff!important}
 @media(max-width:600px){.ops-panel{width:100%}}
+
+/* Announcement ticker (inline, scrolling, dismissible). */
+.notice-ticker{display:flex;align-items:center;gap:10px;padding:8px 42px;background:#fdf6e9;border-bottom:1px solid #f0e6cf;overflow:hidden}
+.notice-ticker[hidden]{display:none}
+.notice-tag{flex:none;font-size:9px;letter-spacing:1px;color:#b08a5e;background:#f6e7cf;border-radius:4px;padding:2px 6px}
+.notice-scroll{flex:1;min-width:0;overflow:hidden;white-space:nowrap}
+.notice-scroll-text{display:inline-block;white-space:nowrap;color:#9a7a4e;font-size:12px;animation:notice-marquee 20s linear infinite}
+.notice-scroll-text a{color:#9a7a4e;text-decoration:none}
+.notice-close{flex:none;width:24px;height:24px;border-radius:6px;color:#b08a5e;font-size:16px;line-height:1;display:grid;place-items:center}
+.notice-close:hover{background:#f6ecd9}
+@keyframes notice-marquee{from{transform:translateX(100%)}to{transform:translateX(-100%)}}
+@media(prefers-reduced-motion:reduce){.notice-scroll-text{animation:none}}
+@media(max-width:900px){.notice-ticker{padding:7px 16px}}
+.btn-link{display:inline-block;margin-top:10px;margin-right:12px;color:#6a8154;text-decoration:underline;font-size:12px}
+
+/* Ops panel additions (connection badge, presets, mini buttons). */
+.ops-head{gap:10px}
+.ops-conn{font-size:10px;margin-left:auto;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.ops-conn.ok{background:#e9f0df;color:#6a8154}
+.ops-conn.warn{background:#f7efe0;color:#a9855a}
+.ops-presets{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}
+.ops-chip{font-size:12px;background:#eef2e6;color:#5d6b52;border-radius:8px;padding:8px 12px}
+.ops-ad-en{white-space:nowrap;margin:0;align-self:center}
+.ops-ad-btns{display:flex;gap:6px;align-items:center}
+.ops-mini{width:28px;height:28px;border-radius:6px;background:#eef2e6;color:#5d6b52;font-size:13px;line-height:1;display:grid;place-items:center}
+.ops-inline{display:flex;flex-wrap:wrap;gap:14px;margin:6px 0}
+.ops-details{margin-top:12px}
+.ops-details summary{cursor:pointer;font-size:12px;color:#7d8574;margin-bottom:8px}

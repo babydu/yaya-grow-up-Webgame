@@ -1,0 +1,6 @@
+{
+  "site": { "footerNote": "" },
+  "ads": { "topEnabled": true, "bottomEnabled": true, "items": [] },
+  "announcement": { "enabled": false, "version": 0, "title": "", "body": "", "link": "", "ticker": true, "modal": true },
+  "updatedAt": 0
+}
