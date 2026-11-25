@@ -688,7 +688,7 @@ function runNanny() {
   }
   const fee=G.nannyCharge(state, now());
   if(window.Stats)window.Stats.bump('nannySeconds',5);
-  if(fee.charged>0) save();
+  if(fee.charged>0){ if(window.Stats)window.Stats.bump('pointsSpent',fee.charged); save(); }
   if(fee.insufficient){
     nannyOn=false;
     try{localStorage.setItem('slow-growing-nanny','0');}catch{}

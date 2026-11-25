@@ -309,6 +309,11 @@
 .consent-more{color:#bcd0a8;text-decoration:underline;font-size:11px}
 
 /* Ops stats viewer */
+.ops-presence{margin-top:10px}
+.ops-presence-cards{grid-template-columns:repeat(3,1fr)}
+.ops-card.ops-live{border-color:#cdd9c2;background:#f2f7ec}
+.ops-card.ops-live strong{color:#4f7a3f}
+@media(max-width:700px){.ops-presence-cards{grid-template-columns:1fr 1fr}}
 .ops-stats{margin-top:12px;border:1px solid #e9ece3;border-radius:10px;padding:12px;background:#f7f9f1}
 .ops-stat-totals{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:12px;color:#5d6b52}
 .ops-stat-totals b{color:#4b5a44}

@@ -12,6 +12,7 @@
   let draft = null;
   let root = null;
   let token = '';
+  let presenceTimer = null;
 
   const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const note = msg => { try { if (typeof window.toast === 'function') window.toast(msg); } catch (_) { /* ignore */ } };
@@ -78,7 +79,8 @@
             <label class="ops-check"><input type="checkbox" id="ops-an-dnt"> 尊重浏览器「请勿跟踪」(DNT)</label>
             <label class="ops-check"><input type="checkbox" id="ops-an-consent"> 需要访客同意后再加载第三方统计</label>
             <p class="ops-hint">匿名统计只上报聚合计数，不使用 Cookie、不存设备标识、不采集个人信息。第三方统计（GA）需合规（同意/DNT）。</p>
-            <div class="ops-actions"><button type="button" id="ops-stats-refresh" class="ops-primary">查看统计（需后端）</button></div>
+            <div class="ops-actions"><button type="button" id="ops-stats-refresh" class="ops-primary">查看统计（需后端）</button><button type="button" id="ops-presence-refresh" class="ops-chip">刷新在线人数</button></div>
+            <div id="ops-presence" class="ops-presence"></div>
             <div id="ops-stats" class="ops-stats"><p class="ops-empty">点上方按钮加载统计（需 server.js 后端）。</p></div>
           </section>
           <section class="ops-sec">
@@ -258,10 +260,14 @@
       draft = JSON.parse(JSON.stringify(S.getConfig()));
       renderEditor();
       root.hidden = false;
+      loadPresence();
+      if (presenceTimer) clearInterval(presenceTimer);
+      presenceTimer = setInterval(() => { if (root && !root.hidden) loadPresence(); }, 30000);
     });
   }
   function close() {
     if (root) root.hidden = true;
+    if (presenceTimer) { clearInterval(presenceTimer); presenceTimer = null; }
     document.documentElement.style.overflow = '';
     document.body.style.overflow = '';
     if (hashToken()) history.replaceState(null, '', location.pathname + location.search);
@@ -303,6 +309,28 @@
   const STAGE_LABELS = { stage_0: '第1阶段', stage_1: '第2阶段', stage_2: '第3阶段', stage_3: '第4阶段' };
   const fmtN = n => Number(n || 0).toLocaleString('zh-CN');
   const mmdd = day => String(day).slice(5);
+
+  async function loadPresence() {
+    const box = $ops('#ops-presence');
+    if (!box) return;
+    const t = hashToken();
+    if (!t) { box.innerHTML = '<p class="ops-empty">请用带 #ops=密钥 的地址打开后台。</p>'; return; }
+    try {
+      const r = await fetch('api/presence', { headers: { 'x-admin-token': t } });
+      if (r.status === 401) { box.innerHTML = '<p class="ops-empty">密钥不正确或未部署后端。</p>'; return; }
+      if (!r.ok) { box.innerHTML = '<p class="ops-empty">在线统计接口不可用（需 server.js）。</p>'; return; }
+      const d = await r.json();
+      box.innerHTML =
+        `<div class="ops-cards ops-presence-cards">` +
+        `<div class="ops-card ops-live"><small>当前活跃（前台可见）</small><strong>${fmtN(d.activeNow)}</strong></div>` +
+        `<div class="ops-card"><small>当前在线（含后台标签）</small><strong>${fmtN(d.onlineNow)}</strong></div>` +
+        `<div class="ops-card"><small>今日到访（近似）</small><strong>${fmtN(d.activeToday)}</strong></div>` +
+        `</div>` +
+        `<p class="ops-hint">实时数据来自最近 60 秒内的心跳，仅内存维护、不落盘、不含个人身份；服务重启或过零点会重置。</p>`;
+    } catch (_) {
+      box.innerHTML = '<p class="ops-empty">无法连接在线统计接口（纯静态部署不提供）。</p>';
+    }
+  }
 
   function statHbars(items, color) {
     const max = Math.max(1, ...items.map(i => i.value));
@@ -384,6 +412,7 @@
     const down = t.closest('[data-down]'); if (down) { reorder(Number(down.getAttribute('data-down')), 1); return; }
     const del = t.closest('[data-del]'); if (del) { syncDraft(); draft.ads.items.splice(Number(del.getAttribute('data-del')), 1); renderEditor(); return; }
     if (t.closest('#ops-stats-refresh')) { syncDraft(); loadStats(); return; }
+    if (t.closest('#ops-presence-refresh')) { loadPresence(); return; }
     if (t.closest('#ops-publish')) { publish(); return; }
     if (t.closest('#ops-preview')) { syncDraft(); S.preview(JSON.parse(JSON.stringify(draft))); note('已在本机预览（未保存）。'); return; }
     if (t.closest('#ops-clearPreview')) { S.clearPreview(); note('已取消本机预览。'); return; }

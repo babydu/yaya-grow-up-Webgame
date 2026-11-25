@@ -145,6 +145,37 @@ function rateAllowed(ip) {
   return true;
 }
 
+// ---- live presence (in-memory) ----
+// Tracks ephemeral per-tab ids sent with the stats heartbeat. Gives "active
+// now / online now / active today" without any persistent identifier or PII.
+// Resets on restart; history lives in stats.json.
+const PRESENCE_TTL = 60000; // a tab counts as present if heard from in 60s
+const presence = new Map(); // id -> { seen: ms, visible: bool }
+const ACTIVE_DAY = { day: '', ids: new Set() };
+function presenceDay() { return today(); }
+function touchPresence(id, visible) {
+  if (!id) return;
+  const now = Date.now();
+  presence.set(id, { seen: now, visible: !!visible });
+  const d = presenceDay();
+  if (ACTIVE_DAY.day !== d) { ACTIVE_DAY.day = d; ACTIVE_DAY.ids = new Set(); }
+  ACTIVE_DAY.ids.add(id);
+  if (presence.size > 20000) {
+    for (const [k, v] of presence) { if (now - v.seen > PRESENCE_TTL) presence.delete(k); }
+  }
+}
+function presenceCounts() {
+  const now = Date.now();
+  let onlineNow = 0, activeNow = 0;
+  for (const [k, v] of presence) {
+    if (now - v.seen > PRESENCE_TTL) { presence.delete(k); continue; }
+    onlineNow++;
+    if (v.visible) activeNow++;
+  }
+  if (ACTIVE_DAY.day !== presenceDay()) { ACTIVE_DAY.day = presenceDay(); ACTIVE_DAY.ids = new Set(); }
+  return { onlineNow, activeNow, activeToday: ACTIVE_DAY.ids.size, updatedAt: now };
+}
+
 function send(res, status, type, body) {
   res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' });
   res.end(body);
@@ -184,9 +215,12 @@ function createServer() {
       req.on('end', () => {
         let body;
         try { body = JSON.parse(raw || '{}'); } catch (_) { return send(res, 400, MIME['.json'], JSON.stringify({ ok: false, error: 'bad-json' })); }
+        // Presence heartbeat: validate ephemeral id (p + base36), no PII.
+        const pid = typeof body.presenceId === 'string' && /^p[0-9a-z]{4,64}$/i.test(body.presenceId) ? body.presenceId : '';
+        if (pid) touchPresence(pid, body.visible !== false);
         const add = sanitizeStat(body);
         const hourOk = Number.isInteger(body.hour) && body.hour >= 0 && body.hour < 24;
-        if (!Object.keys(add).length && !hourOk) return send(res, 200, MIME['.json'], JSON.stringify({ ok: true, ignored: true }));
+        if (!Object.keys(add).length && !hourOk) return send(res, 200, MIME['.json'], JSON.stringify({ ok: true, ignored: true, presence: !!pid }));
         const stats = readStats();
         stats.totals = stats.totals || {}; stats.daily = stats.daily || {}; stats.hourly = stats.hourly || {};
         const day = today();
@@ -212,6 +246,13 @@ function createServer() {
       const token = req.headers['x-admin-token'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
       if (token !== readToken()) return send(res, 401, MIME['.json'], JSON.stringify({ ok: false, error: 'unauthorized' }));
       return send(res, 200, MIME['.json'], JSON.stringify(readStats()));
+    }
+
+    if (p === '/api/presence') {
+      if (req.method !== 'GET') return send(res, 405, 'text/plain; charset=utf-8', 'Method not allowed');
+      const token = req.headers['x-admin-token'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (token !== readToken()) return send(res, 401, MIME['.json'], JSON.stringify({ ok: false, error: 'unauthorized' }));
+      return send(res, 200, MIME['.json'], JSON.stringify(presenceCounts()));
     }
 
     if (p === '/api/site-config') {
@@ -259,4 +300,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createServer, sanitizeConfig, readToken, CONFIG_FILE, STATS_FILE, sanitizeStat };
+module.exports = { createServer, sanitizeConfig, readToken, CONFIG_FILE, STATS_FILE, sanitizeStat, touchPresence, presenceCounts };

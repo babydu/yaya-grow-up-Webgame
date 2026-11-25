@@ -11,6 +11,19 @@
 
   const CONSENT_KEY = 'slow-growing-consent';
   const state = { enabled: false, visible: !document.hidden, lastFlush: Date.now(), pending: {}, started: false };
+  // Ephemeral presence id: lives only in this page's memory (a fresh id each
+  // load, never persisted to localStorage/cookie). Used purely to tell the
+  // server "a tab is still open right now" so it can show live user counts.
+  const presenceId = (function () {
+    try {
+      const c = W.crypto || W.msCrypto;
+      if (c && typeof c.getRandomValues === 'function') {
+        const a = new Uint32Array(3); c.getRandomValues(a);
+        return 'p' + a[0].toString(36) + a[1].toString(36) + a[2].toString(36);
+      }
+    } catch (_) { /* ignore */ }
+    return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  })();
 
   const cfg = () => (W.Site.getConfig().analytics) || {};
 
@@ -39,7 +52,9 @@
     const body = state.pending;
     state.pending = {};
     if (!state.hourSent) { body.hour = state.hour; state.hourSent = true; }
-    if (Object.keys(body).length) post(body, useBeacon);
+    body.presenceId = presenceId;
+    body.visible = !document.hidden;
+    post(body, useBeacon);
   }
 
   // ---- third-party (GA4) ----
@@ -101,6 +116,9 @@
     state.hourSent = false;
     event('pageview');
     event('session');
+    // Announce presence right away so live counts include this tab at once.
+    post({ presenceId: presenceId, visible: !document.hidden, hour: state.hour }, false);
+    state.hourSent = true;
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { flush(false); state.visible = false; }
       else { state.lastFlush = Date.now(); state.visible = true; }

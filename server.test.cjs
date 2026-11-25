@@ -120,3 +120,49 @@ test('stats API aggregates anonymous counters, clamps and is token-guarded', asy
     try { fs.unlinkSync(STATS_FILE); } catch (_) { /* ignore */ }
   }
 });
+
+test('presence API reports live counts from heartbeats, token-guarded', async () => {
+  try { fs.unlinkSync(STATS_FILE); } catch (_) { /* ignore */ }
+  const server = await listen();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const token = readToken();
+  try {
+    // Two visible tabs + one hidden tab heartbeat via the stats endpoint.
+    await fetch(base + '/api/stat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ presenceId: 'pabc123', visible: true })
+    });
+    await fetch(base + '/api/stat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ presenceId: 'pdef456', visible: true })
+    });
+    await fetch(base + '/api/stat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ presenceId: 'pghi789', visible: false })
+    });
+    // Malformed presence ids are ignored (no throw, not counted).
+    await fetch(base + '/api/stat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ presenceId: '<script>', visible: true })
+    });
+
+    // Re-heartbeating the same id does not double-count.
+    await fetch(base + '/api/stat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ presenceId: 'pabc123', visible: true })
+    });
+
+    // Reading live presence requires the operator token.
+    let r = await fetch(base + '/api/presence');
+    assert.equal(r.status, 401);
+    r = await fetch(base + '/api/presence', { headers: { 'x-admin-token': token } });
+    assert.equal(r.status, 200);
+    const d = await r.json();
+    assert.equal(d.onlineNow, 3);
+    assert.equal(d.activeNow, 2);
+    assert.equal(d.activeToday, 3);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    try { fs.unlinkSync(STATS_FILE); } catch (_) { /* ignore */ }
+  }
+});
