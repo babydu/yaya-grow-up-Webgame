@@ -17,7 +17,8 @@
     site: { footerNote: '' },
     ads: { topEnabled: true, bottomEnabled: true, items: [] },
     announcement: { enabled: false, version: 0, title: '', body: '', link: '', ticker: true, modal: true },
-    prices: {}
+    prices: {},
+    analytics: { firstParty: true, provider: '', measurementId: '', respectDNT: true, requireConsent: false }
   };
 
   const clone = o => JSON.parse(JSON.stringify(o));
@@ -41,6 +42,7 @@
     }
     if (extra.announcement && typeof extra.announcement === 'object') out.announcement = { ...out.announcement, ...extra.announcement };
     if (extra.prices && typeof extra.prices === 'object' && !Array.isArray(extra.prices)) out.prices = { ...out.prices, ...extra.prices };
+    if (extra.analytics && typeof extra.analytics === 'object') out.analytics = { ...out.analytics, ...extra.analytics };
     return out;
   }
   function codeDefaults() {

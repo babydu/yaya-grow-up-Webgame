@@ -299,3 +299,20 @@
 .ops-price-name{font-size:12px;color:#5d6b52;overflow-wrap:anywhere}
 .ops-price-row input[type=number]{border:1px solid #dbe3cd;border-radius:7px;padding:7px 9px;font:inherit;font-size:12px;background:#f7f9f1;color:#5d6b52;width:100%;box-sizing:border-box}
 .ops-price-meta{grid-column:1 / -1;font-size:10px;color:#a3ab95}
+
+/* Analytics consent bar (only shown when the operator requires consent). */
+.consent-bar{position:fixed;left:12px;right:12px;bottom:12px;z-index:9998;display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:#2f3a2cdd;color:#eef2e6;border-radius:12px;padding:12px 16px;box-shadow:0 10px 30px #0004;font-size:12px;backdrop-filter:blur(4px)}
+.consent-text{flex:1;min-width:180px;line-height:1.6}
+.consent-actions{display:flex;gap:8px;align-items:center}
+.consent-actions button{font-size:12px;padding:8px 14px;border-radius:8px;background:#eaf0df;color:#3f5135}
+.consent-actions button[data-consent="deny"]{background:#4a5644;color:#dfe6d6}
+.consent-more{color:#bcd0a8;text-decoration:underline;font-size:11px}
+
+/* Ops stats viewer */
+.ops-stats{margin-top:12px;border:1px solid #e9ece3;border-radius:10px;padding:12px;background:#f7f9f1}
+.ops-stat-totals{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:12px;color:#5d6b52}
+.ops-stat-totals b{color:#4b5a44}
+.ops-stat-days{margin-top:12px;border-top:1px dashed #e2e7d8;padding-top:10px}
+.ops-stat-days h4{margin:0 0 8px;font-size:12px;color:#7d8574}
+.ops-stat-day{display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#7d8574;padding:4px 0}
+.ops-stat-day small{color:#a3ab95}

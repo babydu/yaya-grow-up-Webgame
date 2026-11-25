@@ -22,5 +22,7 @@ window.SITE_CONFIG = {
     items: []
   },
   // Optional global price overrides { itemId: packPrice }. Empty = built-in.
-  prices: {}
+  prices: {},
+  // Analytics: anonymous first-party counters by default; optional GA4.
+  analytics: { firstParty: true, provider: '', measurementId: '', respectDNT: true, requireConsent: false }
 };

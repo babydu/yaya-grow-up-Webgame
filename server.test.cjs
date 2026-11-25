@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { createServer, readToken, CONFIG_FILE } = require('./server.js');
+const { createServer, readToken, CONFIG_FILE, STATS_FILE } = require('./server.js');
 
 function listen() {
   return new Promise(resolve => {
@@ -77,5 +77,39 @@ test('site-config API: public read, token-guarded global write that persists', a
   } finally {
     await new Promise(resolve => server.close(resolve));
     if (backup !== null) fs.writeFileSync(CONFIG_FILE, backup);
+  }
+});
+
+test('stats API aggregates anonymous counters, clamps and is token-guarded', async () => {
+  const backup = fs.existsSync(STATS_FILE) ? fs.readFileSync(STATS_FILE, 'utf8') : null;
+  const server = await listen();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const token = readToken();
+  try {
+    // Public, anonymous ingest with junk + out-of-range values.
+    let r = await fetch(base + '/api/stat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pageview: 1, activeSeconds: 30, careActions: 2, hack: 99, bad: -1 })
+    });
+    assert.equal(r.status, 200);
+    r = await fetch(base + '/api/stat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pageview: 1, activeSeconds: 45 })
+    });
+    assert.equal(r.status, 200);
+    // Reading requires the operator token.
+    r = await fetch(base + '/api/stats');
+    assert.equal(r.status, 401);
+    r = await fetch(base + '/api/stats', { headers: { 'x-admin-token': token } });
+    const d = await r.json();
+    assert.equal(d.totals.pageview, 2);
+    assert.equal(d.totals.activeSeconds, 75);
+    assert.equal(d.totals.careActions, 2);
+    assert.equal(d.totals.hack, undefined);
+    assert.equal(d.totals.bad, undefined);
+    assert.ok(Object.keys(d.daily).length >= 1);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    if (backup !== null) fs.writeFileSync(STATS_FILE, backup); else { try { fs.unlinkSync(STATS_FILE); } catch (_) {} }
   }
 });

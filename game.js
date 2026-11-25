@@ -160,6 +160,7 @@ function memorial() {
   return `<div class="memorial"><span class="eyebrow">UNTIL WE MEET AGAIN</span><h2>${customTitle}</h2><ul class="memorial-facts"><li>相伴 ${days} 天</li><li>${escapeHtml(finalStage)}</li><li>亲密度 ${Math.round(state.bond)}</li><li>${leftAt}</li></ul><p class="memorial-bless">${blessings[state.selected] || ''}</p>${farewell ? `<p class="memorial-farewell">${escapeHtml(farewell.text)}</p>` : ''}${logs ? `<div class="memorial-logs">${logs}</div>` : ''}<button class="primary" id="restart-button">开始新的陪伴</button><small>谢谢你陪它走过这一程。新的朋友也正在等待一个温柔的家。</small></div>`;
 }
 function showStageUp(st) {
+  if(window.Stats)window.Stats.event('stageUps');
   const name = petName();
   const lines = {
     cat: `${name}长大了一点，尾巴翘得更高，也更爱黏着你了。`,
@@ -682,6 +683,7 @@ function runNanny() {
     return;
   }
   const fee=G.nannyCharge(state, now());
+  if(window.Stats)window.Stats.bump('nannySeconds',5);
   if(fee.charged>0) save();
   if(fee.insufficient){
     nannyOn=false;
@@ -774,6 +776,7 @@ function tick() {
     careId=null;
     A.stop();
     const taskGain=G.completeDailyTask(state,'care',now());
+    if(window.Stats){window.Stats.event('careActions');window.Stats.bump('pointsEarned',(result.points||0)+(taskGain||0));}
     save();
     $('care-dialog').close();
     render();
@@ -819,6 +822,7 @@ document.addEventListener('click',e=>{
     if(loadFailed&&!confirm('原存档读取失败。开始新故事将写入新的存档，是否继续？'))return;
     try {
       G.adopt(state,selectedType,now(),$('adopt-name').value);loadFailed=false;save();$('adopt-dialog').close();render();
+      if(window.Stats)window.Stats.event('adopts');
       toast('欢迎回家。初见的小心翼翼，会慢慢变成亲密。');
     } catch {
       toast('这次操作暂时无法完成，请导出存档并刷新页面。');
@@ -833,7 +837,10 @@ document.addEventListener('click',e=>{
   if(b.dataset.filter){shopFilter=b.dataset.filter;renderSecondary();}
   const departed=state.status==='left';
   if(departed&&(b.dataset.buy||b.dataset.wear||b.dataset.dye!==undefined||b.dataset.remedy||b.dataset.toolbox||b.id==='relief-button')){toast(G.petName(state)+(state.selected==='plant'?'的这一季已经结束，开始新的陪伴吧':'已经离开，开始新的陪伴吧'));return;}
-  if(b.dataset.buy)execute(()=>G.buy(state,b.dataset.buy,now()),'物资已放进小屋，照护时可以使用。');
+  if(b.dataset.buy){
+    const item=G.catalog.find(p=>p.id===b.dataset.buy);
+    if(execute(()=>G.buy(state,b.dataset.buy,now()),'物资已放进小屋，照护时可以使用。')){ if(window.Stats&&item)window.Stats.bump('pointsSpent',item.price); }
+  }
   if(b.dataset.wear) {
     const id=b.dataset.wear;
     const wasWorn=G.isEquipped(state,id);
@@ -853,7 +860,10 @@ document.addEventListener('click',e=>{
   if(b.id==='relief-button')execute(()=>G.relief(state,now()),'基础补给已送达，继续温柔地陪伴吧。');
   if(b.id==='checkin-button') {
     const before=state.points;
-    if(execute(()=>G.checkin(state,now())))toast(`连续签到 ${state.checkin.streak} 天，积分 +${state.points-before}。`);
+    if(execute(()=>G.checkin(state,now()))){
+      if(window.Stats){window.Stats.event('checkins');window.Stats.bump('pointsEarned',state.points-before);}
+      toast(`连续签到 ${state.checkin.streak} 天，积分 +${state.points-before}。`);
+    }
   }
   if(b.id==='care-toggle')toggleCare();
   if(b.id==='care-shop'){$('care-dialog').close();navigate('supplies');}

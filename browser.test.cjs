@@ -741,6 +741,9 @@ const assert = require('node:assert/strict');
       await opsPage.evaluate(() => { location.hash = 'ops=mkx7d2'; });
       await opsPage.waitForTimeout(300);
       assert.equal(await opsPage.locator('#ops-root').isVisible(), true);
+      // Analytics: client Stats API + admin analytics settings exist.
+      assert.equal(await opsPage.evaluate(() => typeof window.Stats === 'object' && typeof window.Stats.bump === 'function'), true);
+      assert.equal(await opsPage.locator('#ops-an-firstParty').count(), 1);
       // Price editor: override cat-milk, preview applies to the engine, reset restores default.
       await opsPage.locator('#ops-prices input[data-price-id="cat-milk"]').fill('37');
       await opsPage.locator('#ops-preview').click();

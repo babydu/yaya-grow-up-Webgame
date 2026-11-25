@@ -69,6 +69,19 @@
             <button type="button" class="ops-chip" id="ops-prices-reset">恢复默认价格</button>
           </section>
           <section class="ops-sec">
+            <h3>统计与分析</h3>
+            <label class="ops-check"><input type="checkbox" id="ops-an-firstParty"> 启用匿名统计（页面时长/照护次数等，无个人身份）</label>
+            <label class="ops-field"><span>第三方统计</span>
+              <select id="ops-an-provider"><option value="">不启用</option><option value="ga4">Google Analytics 4</option></select>
+            </label>
+            <label class="ops-field"><span>GA4 测量 ID（如 G-XXXXXXX）</span><input type="text" id="ops-an-mid" placeholder="G-XXXXXXX" autocomplete="off"></label>
+            <label class="ops-check"><input type="checkbox" id="ops-an-dnt"> 尊重浏览器「请勿跟踪」(DNT)</label>
+            <label class="ops-check"><input type="checkbox" id="ops-an-consent"> 需要访客同意后再加载第三方统计</label>
+            <p class="ops-hint">匿名统计只上报聚合计数，不使用 Cookie、不存设备标识、不采集个人信息。第三方统计（GA）需合规（同意/DNT）。</p>
+            <div class="ops-actions"><button type="button" id="ops-stats-refresh" class="ops-primary">查看统计（需后端）</button></div>
+            <div id="ops-stats" class="ops-stats"><p class="ops-empty">点上方按钮加载统计（需 server.js 后端）。</p></div>
+          </section>
+          <section class="ops-sec">
             <h3>站点文案</h3>
             <label class="ops-field"><span>页脚补充说明</span><textarea id="ops-footerNote" rows="2" placeholder="例如：本站由 XXX 支持"></textarea></label>
           </section>
@@ -170,6 +183,12 @@
     $ops('#ops-ads').innerHTML = draft.ads.items.length ? draft.ads.items.map(adRow).join('') : '<p class="ops-empty">还没有广告。用上面的快捷按钮添加。</p>';
     $ops('#ops-json').value = JSON.stringify({ site: draft.site, ads: draft.ads, announcement: draft.announcement }, null, 2);
     try { $ops('#ops-secret').value = sessionStorage.getItem('ops-write-token') || ''; } catch (_) { /* ignore */ }
+    const an = draft.analytics || {};
+    $ops('#ops-an-firstParty').checked = an.firstParty !== false;
+    $ops('#ops-an-provider').value = an.provider === 'ga4' ? 'ga4' : '';
+    $ops('#ops-an-mid').value = an.measurementId || '';
+    $ops('#ops-an-dnt').checked = an.respectDNT !== false;
+    $ops('#ops-an-consent').checked = an.requireConsent === true;
     renderPrices();
     renderConn();
   }
@@ -211,6 +230,13 @@
       if (Number.isSafeInteger(v) && v >= 1 && v !== def) prices[id] = v;
     });
     draft.prices = prices;
+    draft.analytics = {
+      firstParty: $ops('#ops-an-firstParty').checked,
+      provider: $ops('#ops-an-provider').value === 'ga4' ? 'ga4' : '',
+      measurementId: $ops('#ops-an-mid').value.trim(),
+      respectDNT: $ops('#ops-an-dnt').checked,
+      requireConsent: $ops('#ops-an-consent').checked
+    };
   }
   function reorder(i, dir) {
     syncDraft();
@@ -239,7 +265,7 @@
 
   async function publish() {
     syncDraft();
-    const payload = { site: draft.site, ads: draft.ads, announcement: draft.announcement, prices: draft.prices || {} };
+    const payload = { site: draft.site, ads: draft.ads, announcement: draft.announcement, prices: draft.prices || {}, analytics: draft.analytics };
     const secretEl = $ops('#ops-secret');
     const secret = (secretEl && secretEl.value.trim()) || token;
     try { sessionStorage.setItem('ops-write-token', (secretEl && secretEl.value.trim()) || ''); } catch (_) { /* ignore */ }
@@ -251,6 +277,33 @@
     else { note('无法写入服务器（可能是纯静态部署）。请改用「导出 data/site-config.json」并替换部署。'); }
   }
 
+  async function loadStats() {
+    const box = $ops('#ops-stats');
+    if (!box) return;
+    const t = hashToken();
+    if (!t) { box.innerHTML = '<p class="ops-empty">请用带 #ops=密钥 的地址打开后台。</p>'; return; }
+    box.innerHTML = '<p class="ops-empty">加载中…</p>';
+    try {
+      const r = await fetch('api/stats', { headers: { 'x-admin-token': t } });
+      if (r.status === 401) { box.innerHTML = '<p class="ops-empty">密钥不正确或未部署后端。</p>'; return; }
+      if (!r.ok) { box.innerHTML = '<p class="ops-empty">统计接口不可用（需 server.js）。</p>'; return; }
+      const d = await r.json();
+      renderStats(d);
+    } catch (_) {
+      box.innerHTML = '<p class="ops-empty">无法连接统计接口（纯静态部署不提供）。</p>';
+    }
+  }
+  function renderStats(d) {
+    const box = $ops('#ops-stats');
+    const tot = d.totals || {};
+    const fmt = n => Number(n || 0).toLocaleString('zh-CN');
+    const rows = Object.entries(tot).filter(([, v]) => v > 0).map(([k, v]) => `<span>${esc(k)}</span><b>${fmt(v)}</b>`).join('');
+    const days = Object.keys(d.daily || {}).sort().slice(-7).reverse()
+      .map(day => { const b = d.daily[day]; const sum = ['pageview', 'session', 'careActions', 'activeSeconds'].map(k => (b[k] || 0)).map((v, i) => ['浏览', '会话', '照护', '活跃秒'][i] + ' ' + v).join(' · '); return `<div class="ops-stat-day"><span>${esc(day)}</span><small>${esc(sum)}</small></div>`; }).join('');
+    box.innerHTML = `<div class="ops-stat-totals">${rows || '<p class="ops-empty">暂无累计数据。</p>'}</div>` +
+      (days ? `<div class="ops-stat-days"><h4>最近 7 天</h4>${days}</div>` : '') +
+      `<p class="ops-hint">更新于 ${d.updatedAt ? new Date(d.updatedAt).toLocaleString('zh-CN') : '—'}</p>`;
+  }
   document.addEventListener('click', e => {
     const t = e.target;
     if (t.closest('#ops-close')) { close(); return; }
@@ -261,6 +314,7 @@
     const up = t.closest('[data-up]'); if (up) { reorder(Number(up.getAttribute('data-up')), -1); return; }
     const down = t.closest('[data-down]'); if (down) { reorder(Number(down.getAttribute('data-down')), 1); return; }
     const del = t.closest('[data-del]'); if (del) { syncDraft(); draft.ads.items.splice(Number(del.getAttribute('data-del')), 1); renderEditor(); return; }
+    if (t.closest('#ops-stats-refresh')) { syncDraft(); loadStats(); return; }
     if (t.closest('#ops-publish')) { publish(); return; }
     if (t.closest('#ops-preview')) { syncDraft(); S.preview(JSON.parse(JSON.stringify(draft))); note('已在本机预览（未保存）。'); return; }
     if (t.closest('#ops-clearPreview')) { S.clearPreview(); note('已取消本机预览。'); return; }
@@ -275,7 +329,7 @@
       return;
     }
     if (t.closest('#ops-applyjson')) {
-      try { draft = JSON.parse($ops('#ops-json').value); S.BASE && (draft.site = draft.site || { footerNote: '' }); draft.ads = draft.ads || { topEnabled: true, bottomEnabled: true, items: [] }; draft.announcement = draft.announcement || { enabled: false, version: 0, title: '', body: '', link: '', ticker: true, modal: true }; draft.prices = draft.prices || {}; }
+      try { draft = JSON.parse($ops('#ops-json').value); S.BASE && (draft.site = draft.site || { footerNote: '' }); draft.ads = draft.ads || { topEnabled: true, bottomEnabled: true, items: [] }; draft.announcement = draft.announcement || { enabled: false, version: 0, title: '', body: '', link: '', ticker: true, modal: true }; draft.prices = draft.prices || {}; draft.analytics = draft.analytics || { firstParty: true, provider: '', measurementId: '', respectDNT: true, requireConsent: false }; }
       catch (_) { note('JSON 有误。'); return; }
       renderEditor(); note('已载入到编辑器，点「发布」或「预览」生效。'); return;
     }

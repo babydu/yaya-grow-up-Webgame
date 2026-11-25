@@ -36,5 +36,8 @@ app.js 与 test.cjs 为保留的第一版实现，当前页面使用 v2 模块�
 价格与托管费率支持后台配置：`data/site-config.json` 的 `prices` 覆盖表（按整包价格），后台「物品价格」可逐项修改并「恢复默认价格」，发布后全站生效。
 紧急补足仅保留「守夜求援」：病危、无灵药、积分不足时开放（每日一次）；后续把付费 / 看广告作为最后兜底（未上线）。上述数值为可调参数（托管费率、任务奖励、照护上限）。
 
+## 用户统计
+匿名、无 Cookie 的一阶统计（页面时长、照护/领养/签到/晋级/托管/积分等聚合计数）由 `stats.js` 上报至 `server.js` 的 `POST /api/stat`，聚合在 `data/stats.json`；后台「统计与分析」可开关、查看累计与最近 7 天，并可配置 GA4（尊重 DNT / 需同意）。纯静态部署无统计接口。合规与指标取舍详见 `.monkeycode/docs/STATS.md`。
+
 ## 运营、广告与部署
 全局运营配置存于 `data/site-config.json`（广告、公告、页脚），由前端 `site.js` 读取，**对所有访客生效**；访客本机仅保存「已关闭广告 / 已读公告」的个人状态。`admin.js` 提供**无可见按钮**的隐藏后台，入口 `#ops=<adminToken>`（token 在 `config.js`），可发布公告（顶部滚动条 / 进入弹窗）、管理广告、发布到服务器或导出 JSON。带后端时运行 `node server.js`（`PORT`/`OPS_TOKEN`）提供 `POST /api/site-config` 实时写入；纯静态部署用「导出 JSON」替换该文件。详见 `.monkeycode/docs/DEPLOY.md`。

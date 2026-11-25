@@ -16,6 +16,7 @@ const path = require('node:path');
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'site-config.json');
+const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 
 function readToken() {
   if (process.env.OPS_TOKEN) return String(process.env.OPS_TOKEN);
@@ -85,8 +86,59 @@ function sanitizeConfig(input) {
       if (Number.isSafeInteger(num) && num >= 1 && num <= 1000000) { out.prices[id] = num; n++; }
     }
   }
+  if (input.analytics && typeof input.analytics === 'object') {
+    const a = input.analytics;
+    const mid = String(a.measurementId || '').trim().slice(0, 40);
+    out.analytics = {
+      firstParty: a.firstParty !== false,
+      provider: a.provider === 'ga4' ? 'ga4' : '',
+      measurementId: /^[A-Za-z0-9-]{0,40}$/.test(mid) ? mid : '',
+      respectDNT: a.respectDNT !== false,
+      requireConsent: a.requireConsent === true
+    };
+  }
   out.updatedAt = Date.now();
   return out;
+}
+
+// Anonymous first-party analytics: whitelisted counters only, clamped, no PII.
+const STAT_FIELDS = {
+  pageview: 10000, session: 10000, activeSeconds: 3600, careActions: 10000,
+  adopts: 1000, checkins: 1000, stageUps: 1000, nannySeconds: 3600,
+  pointsEarned: 100000, pointsSpent: 100000
+};
+function today() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function sanitizeStat(input) {
+  const out = {};
+  if (!input || typeof input !== 'object') return out;
+  for (const key of Object.keys(STAT_FIELDS)) {
+    const n = Number(input[key]);
+    if (Number.isFinite(n) && n > 0) out[key] = Math.min(STAT_FIELDS[key], Math.round(n));
+  }
+  return out;
+}
+function readStats() {
+  try { const v = JSON.parse(fs.readFileSync(STATS_FILE, 'utf8')); if (v && typeof v === 'object') return v; } catch (_) { /* ignore */ }
+  return { totals: {}, daily: {}, updatedAt: 0 };
+}
+function writeJsonAtomic(file, value, cb) {
+  fs.mkdir(DATA_DIR, { recursive: true }, () => {
+    const tmp = file + '.tmp';
+    fs.writeFile(tmp, JSON.stringify(value, null, 2), err => {
+      if (err) return cb(err);
+      fs.rename(tmp, file, cb);
+    });
+  });
+}
+const rateBuckets = new Map();
+function rateAllowed(ip) {
+  const now = Date.now();
+  const arr = (rateBuckets.get(ip) || []).filter(t => now - t < 60000);
+  if (arr.length >= 120) { rateBuckets.set(ip, arr); return false; }
+  arr.push(now);
+  rateBuckets.set(ip, arr);
+  if (rateBuckets.size > 5000) rateBuckets.clear();
+  return true;
 }
 
 function send(res, status, type, body) {
@@ -118,6 +170,43 @@ function createServer() {
   return http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     const p = url.pathname;
+
+    if (p === '/api/stat') {
+      if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', 'Method not allowed');
+      const ip = (req.socket && req.socket.remoteAddress) || 'unknown';
+      if (!rateAllowed(ip)) return send(res, 429, MIME['.json'], JSON.stringify({ ok: false, error: 'rate-limited' }));
+      let raw = '';
+      req.on('data', c => { raw += c; if (raw.length > 20000) { raw = ''; req.destroy(); } });
+      req.on('end', () => {
+        let body;
+        try { body = JSON.parse(raw || '{}'); } catch (_) { return send(res, 400, MIME['.json'], JSON.stringify({ ok: false, error: 'bad-json' })); }
+        const add = sanitizeStat(body);
+        if (!Object.keys(add).length) return send(res, 200, MIME['.json'], JSON.stringify({ ok: true, ignored: true }));
+        const stats = readStats();
+        stats.totals = stats.totals || {}; stats.daily = stats.daily || {};
+        const day = today();
+        const bucket = stats.daily[day] || (stats.daily[day] = {});
+        for (const [k, v] of Object.entries(add)) {
+          stats.totals[k] = (stats.totals[k] || 0) + v;
+          bucket[k] = (bucket[k] || 0) + v;
+        }
+        const days = Object.keys(stats.daily).sort();
+        while (days.length > 60) delete stats.daily[days.shift()];
+        stats.updatedAt = Date.now();
+        writeJsonAtomic(STATS_FILE, stats, err => {
+          if (err) return send(res, 500, MIME['.json'], JSON.stringify({ ok: false, error: 'write-failed' }));
+          send(res, 200, MIME['.json'], JSON.stringify({ ok: true }));
+        });
+      });
+      return;
+    }
+
+    if (p === '/api/stats') {
+      if (req.method !== 'GET') return send(res, 405, 'text/plain; charset=utf-8', 'Method not allowed');
+      const token = req.headers['x-admin-token'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (token !== readToken()) return send(res, 401, MIME['.json'], JSON.stringify({ ok: false, error: 'unauthorized' }));
+      return send(res, 200, MIME['.json'], JSON.stringify(readStats()));
+    }
 
     if (p === '/api/site-config') {
       if (req.method === 'GET') {
@@ -164,4 +253,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createServer, sanitizeConfig, readToken, CONFIG_FILE };
+module.exports = { createServer, sanitizeConfig, readToken, CONFIG_FILE, STATS_FILE, sanitizeStat };
