@@ -24,7 +24,7 @@
   const clone = o => JSON.parse(JSON.stringify(o));
   function normalizeAd(a) {
     if (!a || typeof a !== 'object') return null;
-    const text = typeof a.text === 'string' ? a.text.slice(0, 200) : '';
+    const text = typeof a.text === 'string' ? a.text.slice(0, 2000) : '';
     if (!text) return null;
     return {
       id: a.id ? String(a.id) : 'ad-' + Math.random().toString(36).slice(2, 8),
@@ -85,10 +85,16 @@
   function dismissed() { return lsGet(DISMISS, []); }
   function dismissAd(id) { const l = dismissed(); if (!l.includes(id)) { l.push(id); lsSet(DISMISS, l); } renderAds(); }
   function clearDismissed() { try { localStorage.removeItem(DISMISS); } catch (_) { /* ignore */ } renderAds(); }
+  function renderHtml(str) {
+    return (window.SanitizeHtml ? window.SanitizeHtml(str) : esc(str));
+  }
   function adBody(a) {
-    const t = esc(a.text);
     const href = safeLink(a.link);
-    return href ? `<a class="ad-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${t}</a>` : `<span class="ad-text">${t}</span>`;
+    if (href) {
+      const plain = window.SanitizeHtml ? window.SanitizeHtml.strip(a.text) : a.text;
+      return `<a class="ad-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer nofollow">${esc(plain)}</a>`;
+    }
+    return `<span class="ad-text">${renderHtml(a.text)}</span>`;
   }
   function renderSlot(nodeId, slot, enabled) {
     const node = document.getElementById(nodeId);
@@ -124,7 +130,8 @@
     const a = announce();
     if (!a || a.ticker === false) { node.hidden = true; node.innerHTML = ''; return; }
     if (lsGet(TICKER_OFF, null) === a.version) { node.hidden = true; node.innerHTML = ''; return; }
-    const line = (a.title ? a.title : '') + (a.body ? (a.title ? ' · ' : '') + a.body : '');
+    const bodyText = window.SanitizeHtml ? window.SanitizeHtml.strip(a.body || '') : String(a.body || '');
+    const line = (a.title ? window.SanitizeHtml ? window.SanitizeHtml.strip(a.title) : a.title : '') + (bodyText ? (a.title ? ' · ' : '') + bodyText : '');
     const href = safeLink(a.link);
     const inner = href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(line)}</a>` : `<span>${esc(line)}</span>`;
     node.hidden = false;
@@ -135,7 +142,7 @@
     const a = announce();
     if (!dlg || !a || a.modal === false) return;
     if (lsGet(SEEN, null) === a.version) return;
-    const body = a.body ? `<p>${esc(a.body)}</p>` : '';
+    const body = a.body ? `<div class="notice-body">${renderHtml(a.body)}</div>` : '';
     const alink = safeLink(a.link);
     const link = alink ? `<a class="btn-link" href="${esc(alink)}" target="_blank" rel="noopener noreferrer">了解更多</a>` : '';
     document.getElementById('notice-content').innerHTML =

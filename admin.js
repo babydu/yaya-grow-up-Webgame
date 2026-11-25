@@ -40,7 +40,7 @@
             <h3>公告</h3>
             <label class="ops-check"><input type="checkbox" id="ops-an-on"> 启用公告</label>
             <label class="ops-field"><span>标题</span><input type="text" id="ops-an-title" maxlength="120" placeholder="例如：本周小活动"></label>
-            <label class="ops-field"><span>内容</span><textarea id="ops-an-body" rows="3" maxlength="1000" placeholder="一句话说明即可"></textarea></label>
+            <label class="ops-field"><span>内容（支持简单 HTML：b/i/a/br/p/ul/li 等）</span><textarea id="ops-an-body" rows="4" maxlength="4000" placeholder="可写纯文本，或用简单 HTML 排版"></textarea></label>
             <label class="ops-field"><span>链接（可选，http(s) 或 / 开头）</span><input type="text" id="ops-an-link" placeholder="https://..."></label>
             <div class="ops-inline">
               <label class="ops-check"><input type="checkbox" id="ops-an-ticker"> 顶部滚动条</label>
@@ -119,7 +119,7 @@
         </label>
         <label class="ops-check ops-ad-en"><input type="checkbox" data-f="enabled"${a.enabled !== false ? ' checked' : ''}> 启用</label>
       </div>
-      <label class="ops-field"><span>文案</span><input type="text" data-f="text" maxlength="200" value="${esc(a.text)}" placeholder="广告 / 公告文案"></label>
+      <label class="ops-field"><span>文案（支持简单 HTML：b/i/a/br/p/ul/li 等）</span><textarea data-f="text" rows="2" maxlength="2000" placeholder="广告 / 公告文案，可用简单 HTML">${esc(a.text)}</textarea></label>
       <label class="ops-field"><span>链接（可选）</span><input type="text" data-f="link" value="${esc(a.link || '')}" placeholder="https://..."></label>
       <div class="ops-ad-foot"><span class="ops-id">${esc(a.id)}</span>
         <span class="ops-ad-btns">
@@ -252,6 +252,8 @@
     document.querySelectorAll('dialog[open]').forEach(d => { try { d.close(); } catch (_) { /* ignore */ } });
     ensureRoot();
     token = hashToken();
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
     Promise.resolve(S.refresh()).then(() => {
       draft = JSON.parse(JSON.stringify(S.getConfig()));
       renderEditor();
@@ -260,6 +262,8 @@
   }
   function close() {
     if (root) root.hidden = true;
+    document.documentElement.style.overflow = '';
+    document.body.style.overflow = '';
     if (hashToken()) history.replaceState(null, '', location.pathname + location.search);
   }
 
@@ -293,16 +297,81 @@
       box.innerHTML = '<p class="ops-empty">无法连接统计接口（纯静态部署不提供）。</p>';
     }
   }
+  const STAT_LABELS = { pageview: '页面浏览', session: '会话数', activeSeconds: '活跃时长(秒)', careActions: '照护次数', adopts: '领养次数', checkins: '签到次数', stageUps: '晋级次数', nannySeconds: '托管时长(秒)', pointsEarned: '获得积分', pointsSpent: '消耗积分', criticals: '进入病危' };
+  const CARE_LABELS = { care_food: '喂养/浇水', care_clean: '清洁', care_mood: '陪伴/晒太阳', care_energy: '休息/施肥' };
+  const ADOPT_LABELS = { adopt_cat: '小猫·橘汐', adopt_dog: '小狗·麦芽', adopt_baby: '宝宝·阿团', adopt_plant: '植物·团子' };
+  const STAGE_LABELS = { stage_0: '第1阶段', stage_1: '第2阶段', stage_2: '第3阶段', stage_3: '第4阶段' };
+  const fmtN = n => Number(n || 0).toLocaleString('zh-CN');
+  const mmdd = day => String(day).slice(5);
+
+  function statHbars(items, color) {
+    const max = Math.max(1, ...items.map(i => i.value));
+    if (!items.some(i => i.value > 0)) return '<p class="ops-empty">暂无数据</p>';
+    return items.map(it => `<div class="ops-hbar"><span class="ops-hbar-label">${esc(it.label)}</span><span class="ops-hbar-track"><span class="ops-hbar-fill" style="width:${Math.round((it.value / max) * 100)}%;background:${color}"></span></span><b>${fmtN(it.value)}</b></div>`).join('');
+  }
+  function statVBars(items, color) {
+    const w = 560, h = 120, pad = 14, n = Math.max(1, items.length);
+    const max = Math.max(1, ...items.map(i => i.value));
+    const bw = (w - 2 * pad) / n;
+    const step = Math.ceil(n / 6);
+    let bars = '';
+    items.forEach((it, i) => {
+      const bh = Math.round((it.value / max) * (h - 2 * pad));
+      const x = pad + i * bw, y = h - pad - bh;
+      bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${bh}" rx="1" fill="${color}"><title>${esc(it.label)}: ${it.value}</title></rect>`;
+      if (i % step === 0) bars += `<text x="${(x + bw / 2).toFixed(1)}" y="${h - 3}" font-size="9" fill="#a3ab95" text-anchor="middle">${esc(it.label)}</text>`;
+    });
+    return `<svg class="ops-chart" viewBox="0 0 ${w} ${h}" role="img">${bars}</svg>`;
+  }
+  function statLine(items) {
+    const w = 560, h = 150, pad = 20, n = items.length;
+    const max = Math.max(1, ...items.map(i => i.value));
+    const x = i => n <= 1 ? pad : pad + (i * (w - 2 * pad)) / (n - 1);
+    const y = v => h - pad - (v / max) * (h - 2 * pad);
+    const pts = items.map((it, i) => `${x(i).toFixed(1)},${y(it.value).toFixed(1)}`).join(' ');
+    const area = `${pad},${h - pad} ${pts} ${(w - pad)},${h - pad}`;
+    const dots = items.map((it, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(it.value).toFixed(1)}" r="2.4" fill="#718365"><title>${esc(it.label)}: ${it.value}</title></circle>`).join('');
+    const step = Math.ceil(n / 6);
+    const labels = items.map((it, i) => (i % step === 0 || i === n - 1) ? `<text x="${x(i).toFixed(1)}" y="${h - 4}" font-size="9" fill="#a3ab95" text-anchor="middle">${esc(it.label)}</text>` : '').join('');
+    return `<svg class="ops-chart" viewBox="0 0 ${w} ${h}" role="img"><polygon points="${area}" fill="#7183651f"/><polyline points="${pts}" fill="none" stroke="#718365" stroke-width="2"/>${dots}${labels}</svg>`;
+  }
+
   function renderStats(d) {
     const box = $ops('#ops-stats');
+    if (!box) return;
     const tot = d.totals || {};
-    const fmt = n => Number(n || 0).toLocaleString('zh-CN');
-    const rows = Object.entries(tot).filter(([, v]) => v > 0).map(([k, v]) => `<span>${esc(k)}</span><b>${fmt(v)}</b>`).join('');
-    const days = Object.keys(d.daily || {}).sort().slice(-7).reverse()
-      .map(day => { const b = d.daily[day]; const sum = ['pageview', 'session', 'careActions', 'activeSeconds'].map(k => (b[k] || 0)).map((v, i) => ['浏览', '会话', '照护', '活跃秒'][i] + ' ' + v).join(' · '); return `<div class="ops-stat-day"><span>${esc(day)}</span><small>${esc(sum)}</small></div>`; }).join('');
-    box.innerHTML = `<div class="ops-stat-totals">${rows || '<p class="ops-empty">暂无累计数据。</p>'}</div>` +
-      (days ? `<div class="ops-stat-days"><h4>最近 7 天</h4>${days}</div>` : '') +
-      `<p class="ops-hint">更新于 ${d.updatedAt ? new Date(d.updatedAt).toLocaleString('zh-CN') : '—'}</p>`;
+    const session = tot.session || 0;
+    const derived = [
+      { k: '平均活跃时长', v: session ? Math.round((tot.activeSeconds || 0) / session) + ' 秒/会话' : '—' },
+      { k: '平均照护次数', v: session ? ((tot.careActions || 0) / session).toFixed(1) + ' 次/会话' : '—' },
+      { k: '积分净变化', v: fmtN((tot.pointsEarned || 0) - (tot.pointsSpent || 0)) },
+      { k: '托管时长占比', v: (tot.activeSeconds || 0) ? (((tot.nannySeconds || 0) / tot.activeSeconds) * 100).toFixed(1) + '%' : '—' }
+    ];
+    const totRows = Object.keys(STAT_LABELS).filter(k => tot[k] > 0).map(k => `<span>${esc(STAT_LABELS[k])}</span><b>${fmtN(tot[k])}</b>`).join('');
+    const derivedCards = derived.map(x => `<div class="ops-card"><small>${esc(x.k)}</small><strong>${esc(String(x.v))}</strong></div>`).join('');
+    const days = Object.keys(d.daily || {}).sort().slice(-14);
+    const activeSeries = days.map(day => ({ label: mmdd(day), value: (d.daily[day].activeSeconds || 0) }));
+    const lines = days.length ? `<section class="ops-stat-sec"><h4>最近 ${days.length} 天 · 活跃时长(秒)</h4>${statLine(activeSeries)}</section>` : '';
+    const careItems = Object.keys(CARE_LABELS).map(k => ({ label: CARE_LABELS[k], value: tot[k] || 0 }));
+    const adoptItems = Object.keys(ADOPT_LABELS).map(k => ({ label: ADOPT_LABELS[k], value: tot[k] || 0 }));
+    const stageItems = Object.keys(STAGE_LABELS).map(k => ({ label: STAGE_LABELS[k], value: tot[k] || 0 }));
+    const hourly = d.hourly || {};
+    const hourItems = Array.from({ length: 24 }, (_, hh) => ({ label: hh + '时', value: hourly[hh] || 0 }));
+    const dist = `<section class="ops-stat-sec"><h4>照护类型分布</h4>${statHbars(careItems, '#8fa897')}</section>` +
+      `<section class="ops-stat-sec"><h4>领养类型分布</h4>${statHbars(adoptItems, '#c7a16d')}</section>` +
+      `<section class="ops-stat-sec"><h4>阶段晋级分布</h4>${statHbars(stageItems, '#aca1c0')}</section>` +
+      `<section class="ops-stat-sec"><h4>24 小时活跃分布</h4>${statVBars(hourItems, '#718365')}</section>`;
+    const dailyRows = days.slice().reverse().map(day => {
+      const b = d.daily[day];
+      const line = ['pageview', 'session', 'careActions', 'activeSeconds'].map(k => STAT_LABELS[k].replace(/\(.*\)/, '') + ' ' + fmtN(b[k] || 0)).join(' · ');
+      return `<div class="ops-stat-day"><span>${esc(day)}</span><small>${esc(line)}</small></div>`;
+    }).join('');
+    box.innerHTML =
+      `<div class="ops-stat-totals">${totRows || '<p class="ops-empty">暂无累计数据。</p>'}</div>` +
+      `<div class="ops-cards">${derivedCards}</div>` +
+      lines + dist +
+      (dailyRows ? `<section class="ops-stat-sec"><h4>每日明细</h4>${dailyRows}</section>` : '') +
+      `<p class="ops-hint">更新于 ${d.updatedAt ? new Date(d.updatedAt).toLocaleString('zh-CN') : '—'} · 数据为匿名聚合，仅供参考。</p>`;
   }
   document.addEventListener('click', e => {
     const t = e.target;

@@ -12,11 +12,12 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const sanitizeHtml = require('./sanitize-html.js');
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'site-config.json');
-const STATS_FILE = path.join(DATA_DIR, 'stats.json');
+const STATS_FILE = process.env.STATS_FILE ? path.resolve(process.env.STATS_FILE) : path.join(DATA_DIR, 'stats.json');
 
 function readToken() {
   if (process.env.OPS_TOKEN) return String(process.env.OPS_TOKEN);
@@ -45,7 +46,7 @@ function sanitizeConfig(input) {
     if (input.ads && typeof input.ads === 'object') {
       const items = Array.isArray(input.ads.items) ? input.ads.items.slice(0, 30).map(a => {
         if (!a || typeof a !== 'object') return null;
-        const text = String(a.text || '').slice(0, 200);
+        const text = sanitizeHtml(String(a.text || '')).slice(0, 2000);
         if (!text) return null;
         let link = String(a.link || '').trim();
         if (link && !/^https?:\/\//i.test(link) && link[0] !== '/') link = '';
@@ -68,8 +69,8 @@ function sanitizeConfig(input) {
       out.announcement = {
         enabled: an.enabled === true,
         version: Number.isSafeInteger(an.version) ? an.version : 0,
-        title: String(an.title || '').slice(0, 120),
-        body: String(an.body || '').slice(0, 1000),
+        title: sanitizeHtml.strip(String(an.title || '')).slice(0, 120),
+        body: sanitizeHtml(String(an.body || '')).slice(0, 4000),
         link,
         ticker: an.ticker !== false,
         modal: an.modal !== false
@@ -105,7 +106,10 @@ function sanitizeConfig(input) {
 const STAT_FIELDS = {
   pageview: 10000, session: 10000, activeSeconds: 3600, careActions: 10000,
   adopts: 1000, checkins: 1000, stageUps: 1000, nannySeconds: 3600,
-  pointsEarned: 100000, pointsSpent: 100000
+  pointsEarned: 100000, pointsSpent: 100000, criticals: 1000,
+  adopt_cat: 1000, adopt_dog: 1000, adopt_baby: 1000, adopt_plant: 1000,
+  care_food: 10000, care_clean: 10000, care_mood: 10000, care_energy: 10000,
+  stage_0: 1000, stage_1: 1000, stage_2: 1000, stage_3: 1000
 };
 function today() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function sanitizeStat(input) {
@@ -181,15 +185,17 @@ function createServer() {
         let body;
         try { body = JSON.parse(raw || '{}'); } catch (_) { return send(res, 400, MIME['.json'], JSON.stringify({ ok: false, error: 'bad-json' })); }
         const add = sanitizeStat(body);
-        if (!Object.keys(add).length) return send(res, 200, MIME['.json'], JSON.stringify({ ok: true, ignored: true }));
+        const hourOk = Number.isInteger(body.hour) && body.hour >= 0 && body.hour < 24;
+        if (!Object.keys(add).length && !hourOk) return send(res, 200, MIME['.json'], JSON.stringify({ ok: true, ignored: true }));
         const stats = readStats();
-        stats.totals = stats.totals || {}; stats.daily = stats.daily || {};
+        stats.totals = stats.totals || {}; stats.daily = stats.daily || {}; stats.hourly = stats.hourly || {};
         const day = today();
         const bucket = stats.daily[day] || (stats.daily[day] = {});
         for (const [k, v] of Object.entries(add)) {
           stats.totals[k] = (stats.totals[k] || 0) + v;
           bucket[k] = (bucket[k] || 0) + v;
         }
+        if (hourOk) stats.hourly[body.hour] = (stats.hourly[body.hour] || 0) + 1;
         const days = Object.keys(stats.daily).sort();
         while (days.length > 60) delete stats.daily[days.shift()];
         stats.updatedAt = Date.now();

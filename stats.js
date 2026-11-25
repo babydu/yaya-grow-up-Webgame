@@ -38,6 +38,7 @@
     state.lastFlush = now;
     const body = state.pending;
     state.pending = {};
+    if (!state.hourSent) { body.hour = state.hour; state.hourSent = true; }
     if (Object.keys(body).length) post(body, useBeacon);
   }
 
@@ -96,6 +97,8 @@
     if (!state.enabled) return;
     state.started = true;
     state.lastFlush = Date.now();
+    state.hour = new Date().getHours();
+    state.hourSent = false;
     event('pageview');
     event('session');
     document.addEventListener('visibilitychange', () => {

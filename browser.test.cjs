@@ -743,6 +743,14 @@ const assert = require('node:assert/strict');
       assert.equal(await opsPage.locator('#ops-root').isVisible(), true);
       // Analytics: client Stats API + admin analytics settings exist.
       assert.equal(await opsPage.evaluate(() => typeof window.Stats === 'object' && typeof window.Stats.bump === 'function'), true);
+      // Backend takes over the whole viewport (no game UI behind).
+      const fsBox = await opsPage.evaluate(() => ({ w: document.getElementById('ops-root').getBoundingClientRect().width, iw: window.innerWidth }));
+      assert.ok(fsBox.w >= fsBox.iw - 1, 'ops root is full width');
+      // HTML is allowed but scripts/unsafe attrs are stripped.
+      const san = await opsPage.evaluate(() => window.SanitizeHtml('<b>hi</b><img src=x onerror=alert(1)><script>bad()</script><a href="javascript:alert(1)">x</a>'));
+      assert.ok(san.includes('<b>hi</b>'));
+      assert.ok(!/script|<img|onerror|javascript:/i.test(san));
+
       assert.equal(await opsPage.locator('#ops-an-firstParty').count(), 1);
       // Price editor: override cat-milk, preview applies to the engine, reset restores default.
       await opsPage.locator('#ops-prices input[data-price-id="cat-milk"]').fill('37');

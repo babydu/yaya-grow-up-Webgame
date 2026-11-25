@@ -1,28 +1,8 @@
 {
-  "site": {
-    "footerNote": ""
-  },
-  "ads": {
-    "topEnabled": true,
-    "bottomEnabled": true,
-    "items": []
-  },
-  "announcement": {
-    "enabled": false,
-    "version": 0,
-    "title": "",
-    "body": "",
-    "link": "",
-    "ticker": true,
-    "modal": true
-  },
+  "site": { "footerNote": "" },
+  "ads": { "topEnabled": true, "bottomEnabled": true, "items": [] },
+  "announcement": { "enabled": false, "version": 0, "title": "", "body": "", "link": "", "ticker": true, "modal": true },
   "prices": {},
-  "updatedAt": 0,
-  "analytics": {
-    "firstParty": true,
-    "provider": "",
-    "measurementId": "",
-    "respectDNT": true,
-    "requireConsent": false
-  }
+  "analytics": { "firstParty": true, "provider": "", "measurementId": "", "respectDNT": true, "requireConsent": false },
+  "updatedAt": 0
 }

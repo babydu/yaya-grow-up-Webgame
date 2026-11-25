@@ -17,6 +17,7 @@ let state;
 let storageFailed = false;
 let loadFailed = false;
 let lastStageIndex = null;
+let lastCritical = false;
 let page = 'home';
 let selectedType = 'cat';
 let careId = null;
@@ -160,7 +161,7 @@ function memorial() {
   return `<div class="memorial"><span class="eyebrow">UNTIL WE MEET AGAIN</span><h2>${customTitle}</h2><ul class="memorial-facts"><li>相伴 ${days} 天</li><li>${escapeHtml(finalStage)}</li><li>亲密度 ${Math.round(state.bond)}</li><li>${leftAt}</li></ul><p class="memorial-bless">${blessings[state.selected] || ''}</p>${farewell ? `<p class="memorial-farewell">${escapeHtml(farewell.text)}</p>` : ''}${logs ? `<div class="memorial-logs">${logs}</div>` : ''}<button class="primary" id="restart-button">开始新的陪伴</button><small>谢谢你陪它走过这一程。新的朋友也正在等待一个温柔的家。</small></div>`;
 }
 function showStageUp(st) {
-  if(window.Stats)window.Stats.event('stageUps');
+  if(window.Stats){window.Stats.event('stageUps');window.Stats.bump('stage_'+st.index,1);}
   const name = petName();
   const lines = {
     cat: `${name}长大了一点，尾巴翘得更高，也更爱黏着你了。`,
@@ -177,6 +178,9 @@ function render() {
   G.refresh(state, now());
   const p = profile(), st = G.stage(state), actions = G.careOptions(state), tier = G.healthTier(state);
   const gone = tier === 'left';
+  const nowCritical = state.criticalAt !== null;
+  if(nowCritical && !lastCritical && window.Stats)window.Stats.event('criticals');
+  lastCritical = nowCritical;
   $('welcome-back').hidden = !state.task || gone;
   if (state.task && !gone) $('welcome-back').innerHTML = `${icon('clock')} 上一次的${escapeHtml(state.task.name)}还在等你，进度已经保存。<button data-care="${state.task.actionId}">继续陪伴</button>`;
   $('companion-chip').innerHTML = portrait(state.selected) + `<strong>${p.kind} · ${escapeHtml(petName())}</strong><span>${gone ? (state.selected === 'plant' ? '这一季已结束' : '已经离开') : st.name}</span>`;
@@ -776,7 +780,7 @@ function tick() {
     careId=null;
     A.stop();
     const taskGain=G.completeDailyTask(state,'care',now());
-    if(window.Stats){window.Stats.event('careActions');window.Stats.bump('pointsEarned',(result.points||0)+(taskGain||0));}
+    if(window.Stats){window.Stats.event('careActions');window.Stats.bump('care_'+finishedAction,1);window.Stats.bump('pointsEarned',(result.points||0)+(taskGain||0));}
     save();
     $('care-dialog').close();
     render();
@@ -822,7 +826,7 @@ document.addEventListener('click',e=>{
     if(loadFailed&&!confirm('原存档读取失败。开始新故事将写入新的存档，是否继续？'))return;
     try {
       G.adopt(state,selectedType,now(),$('adopt-name').value);loadFailed=false;save();$('adopt-dialog').close();render();
-      if(window.Stats)window.Stats.event('adopts');
+      if(window.Stats){window.Stats.event('adopts');window.Stats.bump('adopt_'+selectedType,1);}
       toast('欢迎回家。初见的小心翼翼，会慢慢变成亲密。');
     } catch {
       toast('这次操作暂时无法完成，请导出存档并刷新页面。');
