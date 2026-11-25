@@ -174,3 +174,6 @@
 *.lz
 *.lzma
 *.iso
+
+# Runtime data scratch (server writes atomically via *.tmp)
+data/*.tmp
