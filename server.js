@@ -12,6 +12,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const sanitizeHtml = require('./sanitize-html.js');
 
 const ROOT = __dirname;
@@ -19,15 +20,29 @@ const DATA_DIR = path.join(ROOT, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'site-config.json');
 const STATS_FILE = process.env.STATS_FILE ? path.resolve(process.env.STATS_FILE) : path.join(DATA_DIR, 'stats.json');
 
+// The write token comes from the OPS_TOKEN env var. When it is absent we fall
+// back to the adminToken declared in config.js, which is served to every
+// visitor, so in that case publishing is NOT actually protected (see /api/ops-status
+// and the guided warning printed at startup + shown in the ops panel).
+let _token = '', _tokenResolved = false;
 function readToken() {
-  if (process.env.OPS_TOKEN) return String(process.env.OPS_TOKEN);
+  if (_tokenResolved) return _token;
+  _tokenResolved = true;
+  if (process.env.OPS_TOKEN) { _token = String(process.env.OPS_TOKEN); return _token; }
   try {
     const src = fs.readFileSync(path.join(ROOT, 'config.js'), 'utf8');
     const m = /adminToken\s*:\s*['"]([^'"]+)['"]/.exec(src);
-    if (m) return m[1];
+    if (m) { _token = m[1]; return _token; }
   } catch (_) { /* ignore */ }
-  return 'mkx7d2';
+  _token = 'mkx7d2';
+  return _token;
 }
+// "Protected" only when the secret lives in the environment: config.js is public.
+function tokenStatus() {
+  readToken();
+  return { writeProtected: !!process.env.OPS_TOKEN, source: process.env.OPS_TOKEN ? 'env' : 'config' };
+}
+function randomToken() { return crypto.randomBytes(24).toString('base64url'); }
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -83,6 +98,7 @@ function sanitizeConfig(input) {
     for (const [k, v] of Object.entries(input.prices)) {
       if (n >= 500) break;
       const id = String(k).slice(0, 80);
+      if (id === '__proto__' || id === 'constructor' || id === 'prototype') continue;
       const num = Number(v);
       if (Number.isSafeInteger(num) && num >= 1 && num <= 1000000) { out.prices[id] = num; n++; }
     }
@@ -184,8 +200,13 @@ function send(res, status, type, body) {
 function serveStatic(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath.split('?')[0]);
   if (rel === '/' || rel === '') rel = '/index.html';
-  // Block server source, test files, dotfiles and the git dir from being served.
-  if (rel === '/server.js' || /\.test\.cjs$/i.test(rel) || rel.startsWith('/.') || rel.startsWith('/.git')) {
+  // Block server source, test files, dotfiles, the git dir, and runtime data
+  // that must stay behind the admin token (stats.json holds the analytics the
+  // token-gated /api/stats serves; *.tmp are mid-write scratch files).
+  const blocked = rel === '/server.js' || /\.test\.cjs$/i.test(rel)
+    || rel.startsWith('/.') || rel.startsWith('/.git')
+    || /^\/data\/stats\.json$/i.test(rel) || /^\/data\/[^/]+\.tmp$/i.test(rel);
+  if (blocked) {
     return send(res, 404, 'text/plain; charset=utf-8', 'Not found');
   }
   const filePath = path.normalize(path.join(ROOT, rel));
@@ -255,6 +276,13 @@ function createServer() {
       return send(res, 200, MIME['.json'], JSON.stringify(presenceCounts()));
     }
 
+    if (p === '/api/ops-status') {
+      if (req.method !== 'GET') return send(res, 405, 'text/plain; charset=utf-8', 'Method not allowed');
+      const token = req.headers['x-admin-token'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (token !== readToken()) return send(res, 401, MIME['.json'], JSON.stringify({ ok: false, error: 'unauthorized' }));
+      return send(res, 200, MIME['.json'], JSON.stringify(tokenStatus()));
+    }
+
     if (p === '/api/site-config') {
       if (req.method === 'GET') {
         fs.readFile(CONFIG_FILE, 'utf8', (err, data) => {
@@ -264,6 +292,8 @@ function createServer() {
         return;
       }
       if (req.method === 'POST') {
+        const ip = (req.socket && req.socket.remoteAddress) || 'unknown';
+        if (!rateAllowed(ip)) return send(res, 429, MIME['.json'], JSON.stringify({ ok: false, error: 'rate-limited' }));
         const token = req.headers['x-admin-token'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
         if (token !== readToken()) return send(res, 401, MIME['.json'], JSON.stringify({ ok: false, error: 'unauthorized' }));
         let raw = '';
@@ -294,10 +324,20 @@ function createServer() {
 }
 
 if (require.main === module) {
+  if (process.argv.includes('--print-token')) {
+    console.log(randomToken());
+    process.exit(0);
+  }
   const port = Number(process.env.PORT) || 8000;
   createServer().listen(port, () => {
-    console.log(`site server on http://localhost:${port}  (ops token from ${process.env.OPS_TOKEN ? 'env' : 'config.js'})`);
+    console.log(`site server on http://localhost:${port}`);
+    const st = tokenStatus();
+    if (st.writeProtected) {
+      console.log('  ops write token: OPS_TOKEN (protected)');
+    } else {
+      console.log('\n  ! OPS_TOKEN is not set. Publishing is protected only by the\n    public adminToken in config.js, which every visitor can read.\n\n    To secure the panel:\n      1) generate a strong token:  node server.js --print-token\n      2) start with it:            OPS_TOKEN=<that token> PORT=' + port + ' node server.js\n      3) in the ops panel, paste it into "运维写入密钥" and publish.\n');
+    }
   });
 }
 
-module.exports = { createServer, sanitizeConfig, readToken, CONFIG_FILE, STATS_FILE, sanitizeStat, touchPresence, presenceCounts };
+module.exports = { createServer, sanitizeConfig, readToken, tokenStatus, randomToken, CONFIG_FILE, STATS_FILE, sanitizeStat, touchPresence, presenceCounts };

@@ -6,7 +6,7 @@ const os = require('node:os');
 const pathm = require('node:path');
 process.env.STATS_FILE = pathm.join(os.tmpdir(), 'opencode-stats-' + process.pid + '.json');
 try { fs.unlinkSync(process.env.STATS_FILE); } catch (_) { /* ignore */ }
-const { createServer, readToken, CONFIG_FILE, STATS_FILE } = require('./server.js');
+const { createServer, readToken, tokenStatus, randomToken, CONFIG_FILE, STATS_FILE } = require('./server.js');
 
 function listen() {
   return new Promise(resolve => {
@@ -165,4 +165,77 @@ test('presence API reports live counts from heartbeats, token-guarded', async ()
     await new Promise(resolve => server.close(resolve));
     try { fs.unlinkSync(STATS_FILE); } catch (_) { /* ignore */ }
   }
+});
+
+test('security: raw stats.json is not served, ops-status reports protection, price keys are hardened', async () => {
+  const backup = fs.existsSync(CONFIG_FILE) ? fs.readFileSync(CONFIG_FILE, 'utf8') : null;
+  try { fs.unlinkSync(STATS_FILE); } catch (_) { /* ignore */ }
+  const server = await listen();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const token = readToken();
+  try {
+    // Anonymous analytics must NOT be downloadable as a static file (bypassing /api/stats).
+    let r = await fetch(base + '/data/stats.json');
+    assert.equal(r.status, 404, 'raw stats.json blocked');
+    // Mid-write scratch files must not leak either.
+    fs.writeFileSync(STATS_FILE + '.tmp', '{"partial":1}');
+    r = await fetch(base + '/data/stats.json.tmp');
+    assert.equal(r.status, 404, 'stats tmp blocked');
+    // The public config stays readable (site.js needs it).
+    r = await fetch(base + '/data/site-config.json');
+    assert.equal(r.status, 200, 'site-config stays public');
+
+    // ops-status: token-gated, reports whether the write key is really protected.
+    r = await fetch(base + '/api/ops-status');
+    assert.equal(r.status, 401);
+    r = await fetch(base + '/api/ops-status', { headers: { 'x-admin-token': token } });
+    assert.equal(r.status, 200);
+    const st = await r.json();
+    assert.equal(typeof st.writeProtected, 'boolean');
+    assert.equal(st.writeProtected, !!process.env.OPS_TOKEN);
+
+    // Prototype-polluting price keys are dropped, not stored.
+    r = await fetch(base + '/api/site-config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+      body: JSON.stringify({ prices: { '__proto__': 5, constructor: 5, 'cat-milk': 20 } })
+    });
+    assert.equal(r.status, 200);
+    const cfg = await (await fetch(base + '/api/site-config')).json();
+    assert.equal(cfg.prices['cat-milk'], 20);
+    assert.equal(Object.prototype.hasOwnProperty.call(cfg.prices, '__proto__'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(cfg.prices, 'constructor'), false);
+    assert.equal(Object.getPrototypeOf(cfg.prices), Object.prototype);
+
+    // Token generator produces usable, distinct secrets.
+    const a = randomToken(), b = randomToken();
+    assert.ok(a.length >= 16 && a !== b, 'random tokens differ and are long enough');
+  } finally {
+    try { fs.unlinkSync(STATS_FILE + '.tmp'); } catch (_) { /* ignore */ }
+    await new Promise(resolve => server.close(resolve));
+    if (backup !== null) fs.writeFileSync(CONFIG_FILE, backup);
+    try { fs.unlinkSync(STATS_FILE); } catch (_) { /* ignore */ }
+  }
+});
+
+test('sanitize-html neutralises script injection, event handlers and unsafe urls', async () => {
+  const s = require('./sanitize-html.js');
+  // Script blocks and unknown tags are dropped; text is kept.
+  assert.equal(s('<script>alert(1)</script><b>hi</b>'), '<b>hi</b>');
+  assert.equal(s('<img src=x onerror=alert(1)>'), '');
+  // Event-handler attributes never survive on allowed tags.
+  assert.equal(s('<b onclick="alert(1)">x</b>'), '<b>x</b>');
+  // javascript: hrefs are dropped together with the anchor (text kept).
+  assert.ok(!/javascript/i.test(s('<a href="javascript:alert(1)">c</a>')));
+  assert.ok(/c/.test(s('<a href="javascript:alert(1)">c</a>')));
+  // Entity-encoded scheme is also rejected (we test the raw string).
+  assert.ok(!/javascript/i.test(s('<a href="jav&#x61;script:alert(1)">c</a>')));
+  // Safe http(s) and root-relative links are kept and sandboxed.
+  assert.equal(s('<a href="https://ok.example/x">l</a>'), '<a href="https://ok.example/x" target="_blank" rel="noopener noreferrer nofollow">l</a>');
+  assert.equal(s('<a href="/local">l</a>'), '<a href="/local" target="_blank" rel="noopener noreferrer nofollow">l</a>');
+  // Style/script tags without a closing tag are still dropped (their text is
+  // inert, the tag itself never survives).
+  assert.equal(s('<style>body{}'), 'body{}');
+  assert.equal(s('<script>alert(1)'), 'alert(1)');
+  // strip() collapses raw text for ticker use.
+  assert.equal(s.strip('<p>a</p> <b>b</b>'), 'a b');
 });

@@ -38,10 +38,17 @@ npx serve
 ### 带后端（推荐生产）
 
 ```bash
-PORT=8080 OPS_TOKEN=你的密钥 node server.js
+# 1) 生成随机写入密钥
+node server.js --print-token
+
+# 2) 用它启动
+OPS_TOKEN=<上一步的串> PORT=8080 node server.js
 ```
 
-`server.js` 同时提供静态站点与三个 API：
+> 首次部署的完整引导（入口 token 与写入密钥的区别、验证步骤）见
+> [`.monkeycode/docs/DEPLOY.md`](.monkeycode/docs/DEPLOY.md) 第二节。
+
+`server.js` 同时提供静态站点与五个 API：
 
 | 接口 | 方法 | 说明 |
 |---|---|---|
@@ -50,6 +57,7 @@ PORT=8080 OPS_TOKEN=你的密钥 node server.js
 | `/api/stat` | POST | 匿名统计上报（白名单 + 钳制 + 限流） |
 | `/api/stats` | GET | 需 token，读取累计统计 |
 | `/api/presence` | GET | 需 token，读取当前在线 / 活跃人数 |
+| `/api/ops-status` | GET | 需 token，写入密钥是否已受 OPS_TOKEN 保护 |
 
 ## 目录结构
 
@@ -80,7 +88,13 @@ tools/prepare_assets.py 美术资产重生成管线（rembg 抠图）
 https://你的域名/#ops=<adminToken>
 ```
 
-`adminToken` 定义在 `config.js`。**生产环境请务必在服务器设置环境变量 `OPS_TOKEN`**（建议与入口 token 不同且足够随机），后台「运维写入密钥」填入同一串即可发布。后台功能：
+`adminToken` 定义在 `config.js`。**注意它对所有访客可见，只负责隐藏面板**；真正保护「发布」的是服务器环境变量 `OPS_TOKEN`。首次部署时：
+
+1. `node server.js --print-token` 生成随机密钥
+2. `OPS_TOKEN=<密钥> PORT=8080 node server.js` 启动
+3. 后台「运维写入密钥」填入同一串并发布验证
+
+后台打开时会自动检测并在顶部显示「部署安全」状态：未设置 `OPS_TOKEN` 显示黄色引导，设置后显示绿色已保护。后台功能：
 
 - **公告**：顶部滚动条 / 进入弹窗，支持简单 HTML（白名单净化），新公告自动更新版本号
 - **广告位**：顶部条幅 / 底部卡片，都在正常文档流中、可关闭、可排序

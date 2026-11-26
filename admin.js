@@ -37,6 +37,11 @@
           <button type="button" id="ops-close" aria-label="关闭后台">关闭</button>
         </header>
         <div class="ops-body">
+          <section class="ops-sec" id="ops-security-sec">
+            <h3>部署安全</h3>
+            <div id="ops-security"></div>
+          </section>
+
           <section class="ops-sec">
             <h3>公告</h3>
             <label class="ops-check"><input type="checkbox" id="ops-an-on"> 启用公告</label>
@@ -248,6 +253,45 @@
     renderEditor();
   }
 
+  // ---- guided security setup ----
+  // The panel entry token (config.js adminToken) is served to every visitor,
+  // so it can never be a real secret. The write key (server OPS_TOKEN) is what
+  // actually protects publishing/stats. Walk the operator through setting it.
+  function writeSecret() {
+    const el = $ops('#ops-secret');
+    const stored = (function () { try { return sessionStorage.getItem('ops-write-token') || ''; } catch (_) { return ''; } })();
+    return (el && el.value.trim()) || stored || token;
+  }
+  async function loadOpsStatus() {
+    const box = $ops('#ops-security');
+    if (!box) return;
+    try {
+      const r = await fetch('api/ops-status', { headers: { 'x-admin-token': writeSecret() } });
+      if (r.status === 401) {
+        box.innerHTML = '<div class="ops-warn"><b>写入密钥不正确。</b>请核对「运维写入密钥」或服务器 OPS_TOKEN 后重试。</div>';
+        return;
+      }
+      if (!r.ok) { box.innerHTML = '<p class="ops-empty">无法读取服务器安全状态（需 server.js）。</p>'; return; }
+      const d = await r.json();
+      if (d.writeProtected) {
+        box.innerHTML = '<div class="ops-ok"><b>已受 OPS_TOKEN 保护。</b>发布与统计由服务器环境变量中的独立密钥校验，入口 token 泄露也无法写入门面。</div>';
+        return;
+      }
+      box.innerHTML = `<div class="ops-warn">
+          <b>发布尚未受保护。</b>当前写入密钥回退到 config.js 的公开 adminToken，任何访客拿到它就能改全站配置/公告。
+          <ol class="ops-steps">
+            <li>生成随机密钥：<code>node server.js --print-token</code></li>
+            <li>用它启动：<code>OPS_TOKEN=&lt;密钥&gt; PORT=8080 node server.js</code></li>
+            <li>在下方「运维写入密钥」填入同一串，点「发布到服务器」验证一次；统计也会随之切换到该密钥。</li>
+          </ol>
+          <p class="ops-hint">入口 token（#ops=…，在 config.js，对访客可见）只负责隐藏此面板；真正保护发布的是 OPS_TOKEN。</p>
+        </div>
+        <div class="ops-actions"><button type="button" id="ops-recheck" class="ops-chip">设置好了，重新检测</button></div>`;
+    } catch (_) {
+      box.innerHTML = `<div class="ops-warn"><b>纯静态部署。</b>没有后端可写：「发布」不可用，请用「导出 data/site-config.json」替换文件后重新部署；统计与在线人数也不可用。</div>`;
+    }
+  }
+
   function open() {
     // Native <dialog> lives in the browser top layer and would sit above this
     // overlay; close any open dialog first so the panel is clickable.
@@ -260,6 +304,7 @@
       draft = JSON.parse(JSON.stringify(S.getConfig()));
       renderEditor();
       root.hidden = false;
+      loadOpsStatus();
       loadPresence();
       if (presenceTimer) clearInterval(presenceTimer);
       presenceTimer = setInterval(() => { if (root && !root.hidden) loadPresence(); }, 30000);
@@ -290,7 +335,7 @@
   async function loadStats() {
     const box = $ops('#ops-stats');
     if (!box) return;
-    const t = hashToken();
+    const t = writeSecret();
     if (!t) { box.innerHTML = '<p class="ops-empty">请用带 #ops=密钥 的地址打开后台。</p>'; return; }
     box.innerHTML = '<p class="ops-empty">加载中…</p>';
     try {
@@ -313,7 +358,7 @@
   async function loadPresence() {
     const box = $ops('#ops-presence');
     if (!box) return;
-    const t = hashToken();
+    const t = writeSecret();
     if (!t) { box.innerHTML = '<p class="ops-empty">请用带 #ops=密钥 的地址打开后台。</p>'; return; }
     try {
       const r = await fetch('api/presence', { headers: { 'x-admin-token': t } });
@@ -413,6 +458,7 @@
     const del = t.closest('[data-del]'); if (del) { syncDraft(); draft.ads.items.splice(Number(del.getAttribute('data-del')), 1); renderEditor(); return; }
     if (t.closest('#ops-stats-refresh')) { syncDraft(); loadStats(); return; }
     if (t.closest('#ops-presence-refresh')) { loadPresence(); return; }
+    if (t.closest('#ops-recheck')) { loadOpsStatus(); return; }
     if (t.closest('#ops-publish')) { publish(); return; }
     if (t.closest('#ops-preview')) { syncDraft(); S.preview(JSON.parse(JSON.stringify(draft))); note('已在本机预览（未保存）。'); return; }
     if (t.closest('#ops-clearPreview')) { S.clearPreview(); note('已取消本机预览。'); return; }

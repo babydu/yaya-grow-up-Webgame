@@ -308,6 +308,13 @@
 .consent-actions button[data-consent="deny"]{background:#4a5644;color:#dfe6d6}
 .consent-more{color:#bcd0a8;text-decoration:underline;font-size:11px}
 
+/* Ops security banner */
+.ops-warn{border:1px solid #e3c98f;background:#fdf6e3;border-radius:10px;padding:10px 12px;font-size:12px;color:#7a5b12;line-height:1.7}
+.ops-ok{border:1px solid #c4d8b8;background:#f0f7ea;border-radius:10px;padding:10px 12px;font-size:12px;color:#3f6333;line-height:1.7}
+.ops-steps{margin:8px 0 4px;padding-left:20px}
+.ops-steps li{margin:4px 0}
+.ops-warn code,.ops-ok code{background:rgba(0,0,0,.06);border-radius:4px;padding:1px 5px;font-size:11px;user-select:all}
+
 /* Ops stats viewer */
 .ops-presence{margin-top:10px}
 .ops-presence-cards{grid-template-columns:repeat(3,1fr)}
