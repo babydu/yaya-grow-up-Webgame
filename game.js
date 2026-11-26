@@ -1003,3 +1003,15 @@ if(state.adopted) {
   selectedType=state.selected||'cat';renderAdoption();$('adopt-dialog').showModal();
   if(loadFailed)toast('原存档读取失败。原始数据仍保留，可先备份再开始新故事。');
 }
+
+// Keep the game playable offline and installable: register the service worker
+// and let the player know when a newer shell has taken over.
+if ('serviceWorker' in navigator) {
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    toast('小屋已经更新到最新版本。');
+  });
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
