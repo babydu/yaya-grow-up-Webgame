@@ -1,0 +1,13 @@
+services:
+  yaya:
+    build: .
+    image: yaya-grow-up:latest
+    container_name: yaya-grow-up
+    restart: unless-stopped
+    ports:
+      - "8080:8080"        # 与 1Panel 反向代理指向的端口一致
+    environment:
+      - PORT=8080
+      - OPS_TOKEN=${OPS_TOKEN:?缺少 OPS_TOKEN，请先编辑 .env}
+    volumes:
+      - ./data:/app/data   # 统计与全局配置持久化，升级不丢

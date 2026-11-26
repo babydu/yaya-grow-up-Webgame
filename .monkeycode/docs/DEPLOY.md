@@ -42,6 +42,26 @@ OPS_TOKEN=<上一步的串> PORT=8080 node server.js
 
 ## 三、两种发布方式（按部署形态选）
 
+**推荐先用 Docker（见第三节 A），一条命令部署、一条命令升级。**
+
+### A. Docker / 1Panel（最省事）
+
+```bash
+git clone https://github.com/babydu/yaya-grow-up-Webgame.git
+cd yaya-grow-up-Webgame
+./deploy.sh      # 首次部署，自动生成 OPS_TOKEN
+./upgrade.sh     # 之后每次升级
+```
+
+- `deploy.sh` 自动生成 `.env`（含随机 `OPS_TOKEN`），构建并启动容器。
+- `upgrade.sh` 备份 `data/` → `git pull` → 重建容器，运行数据零丢失。
+- 容器零 npm 依赖，`server.js` 仅用 Node 内置模块，镜像秒级构建。
+- `data/` 以卷挂载持久化：统计、全局配置、广告/公告/价格覆盖都不丢。
+- 1Panel 收尾：网站反向代理到 `http://127.0.0.1:8080` + 一键申请 HTTPS 证书（PWA 离线与安装需要 HTTPS）。
+- 修改端口：改 `docker-compose.yml` 的 `ports` 与反向代理目标。
+
+### B. 直接运行 Node 进程
+
 1. **带后端（推荐，可实时全站生效）**
    - 运行：`PORT=8080 OPS_TOKEN=你的密钥 node server.js`
    - `server.js` 同时提供静态站点与 `POST /api/site-config`（带 `x-admin-token` 校验），后台「发布到服务器」会原子写入 `data/site-config.json`，所有访客下次加载即生效。

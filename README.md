@@ -45,6 +45,41 @@ node server.js --print-token
 OPS_TOKEN=<上一步的串> PORT=8080 node server.js
 ```
 
+### Docker / 1Panel 部署（最省事）
+
+项目自带 `Dockerfile` + `docker-compose.yml`，零 npm 依赖，镜像秒级构建。
+统计数据与全局配置通过 `./data` 挂载持久化，升级不丢。
+
+```bash
+# 克隆到服务器
+git clone https://github.com/babydu/yaya-grow-up-Webgame.git
+cd yaya-grow-up-Webgame
+
+# 一键部署（自动生成 OPS_TOKEN 写入 .env，构建并启动）
+./deploy.sh
+
+# 之后每次升级
+./upgrade.sh
+```
+
+1Panel 侧的收尾（约 3 分钟）：
+
+1. 面板「网站」→ 创建网站 → 反向代理，目标 `http://127.0.0.1:8080`
+2. 站点设置 → HTTPS → 申请 Let's Encrypt 证书（一键签发）
+3. 打开 `https://你的域名/#ops=<adminToken>`（token 在 `config.js`）
+4. 后台顶部「运维写入密钥」填入 `.env` 里的 `OPS_TOKEN`，发布一次，黄色告警变绿即完成
+
+> PWA（离线可玩、安装到桌面）要求 HTTPS，第 2 步签发证书后自动生效。
+> 修改端口改 `docker-compose.yml` 的 `ports` 与反向代理目标即可。
+
+.env 与两个脚本说明：
+
+| 文件 | 作用 |
+|---|---|
+| `.env` | `deploy.sh` 自动生成的 `OPS_TOKEN`，升级沿用，不要删 |
+| `deploy.sh` | 首次部署；修改 compose 后再跑一次即重应用 |
+| `upgrade.sh` | 备份 `data/` → `git pull` → 重建容器，数据零丢失 |
+
 > 首次部署的完整引导（入口 token 与写入密钥的区别、验证步骤）见
 > [`.monkeycode/docs/DEPLOY.md`](.monkeycode/docs/DEPLOY.md) 第二节。
 
