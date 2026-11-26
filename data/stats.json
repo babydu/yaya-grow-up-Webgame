@@ -1,6 +1,22 @@
 {
-  "totals": {},
-  "daily": {},
-  "hourly": {},
-  "updatedAt": 0
+  "totals": {
+    "activeSeconds": 32,
+    "pageview": 1,
+    "session": 1,
+    "checkins": 1,
+    "pointsEarned": 12
+  },
+  "daily": {
+    "2026-11-26": {
+      "activeSeconds": 32,
+      "pageview": 1,
+      "session": 1,
+      "checkins": 1,
+      "pointsEarned": 12
+    }
+  },
+  "hourly": {
+    "10": 1
+  },
+  "updatedAt": 1795661258473
 }

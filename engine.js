@@ -71,7 +71,8 @@
       since: asleep ? s.sleepAt : null,
       energyRate: asleep ? (night ? SLEEP_GAIN_NIGHT : SLEEP_GAIN_DAY) : 0,
       night,
-      label: asleep ? (night ? '正在熟睡 · 夜深好眠' : '正在午睡 · 轻一点') : null
+      label: asleep ? (night ? '正在熟睡 · 夜深好眠' : '正在午睡 · 轻一点') : null,
+      desc: asleep ? (night ? '夜深了，它睡得正熟。' : '它刚被安抚着，正睡得沉沉的。') : null
     };
   }
   function wake(s, now) {
@@ -694,8 +695,10 @@
   }
   function careBlock(s, actionId) {
     if (s.status === 'left') return departedCopy(s);
-    if (isAsleep(s)) return `${petName(s)}正睡得香，喂养、清洁和玩耍都先等它醒来`;
+    // Critical care comes first: a dying pet must be rescued even mid-nap,
+    // otherwise sleep wording would mask the only life-saving prompt.
     if (s.criticalAt !== null) return `${petName(s)}病危了，先用安心药箱或回春灵药挽回`;
+    if (isAsleep(s)) return `${petName(s)}正睡得香，喂养、清洁和玩耍都先等它醒来`;
     if (s.health < 20 && actionId === 'mood') return `${petName(s)}太虚弱了，先照顾好身体`;
     return null;
   }

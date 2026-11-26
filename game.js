@@ -311,7 +311,7 @@ function render() {
     const status = gone ? (state.selected === 'plant' ? '这一季已经结束' : '已经离开小屋') : task ? '进度已保留' : blocked ? blockReason : satisfied ? '状态很好，稍后再来' : timeUntil(a.dueAt);
     const stockLine = supplies.length ? `适龄物资 ${stock} 份` : '用陪伴回应需要';
     const asleepNow = !gone && G.isAsleep(state);
-    const label = task ? '继续照护' : asleepNow ? '它在睡觉' : blocked ? (state.criticalAt !== null ? '病危中，先用药' : '先照顾身体') : satisfied ? '安心休息' : !due ? '稍后再来' : a.name;
+    const label = task ? '继续照护' : state.criticalAt !== null ? '病危中，先用药' : asleepNow ? '它在睡觉' : blocked ? '先照顾身体' : satisfied ? '安心休息' : !due ? '稍后再来' : a.name;
     return `<article class="care-card ${blocked?'blocked ':''}${!unavailable && state.needs[i]<50?'urgent':''}"><div class="care-card-top"><span class="care-icon">${icon(a.icon)}</span><span class="duration">${icon('clock')}${duration(a.seconds)}</span></div><h3>${a.name}</h3><p class="care-frequency">每 ${a.intervalHours} 小时关注一次</p><div class="care-stock">${stockLine}</div><small class="care-due">${status}</small><button class="care-action" data-care="${a.id}" ${unavailable?'disabled':''}>${label}${icon('arrow')}</button></article>`;
   }).join('');
   $('total-minutes').innerHTML = `${Math.floor(state.daily.seconds/60)} <small>分钟</small>`;

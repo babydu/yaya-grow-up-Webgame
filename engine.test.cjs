@@ -1641,6 +1641,15 @@ test('sleep: plants never enter the sleep model', () => {
   assert.equal(G.isAsleep(s), false);
 });
 
+test('sleep: critical care outranks the nap block', () => {
+  const s = pet('baby');
+  s.needs[3] = 55;
+  complete(s, 'energy');
+  assert.ok(G.isAsleep(s));
+  s.criticalAt = NOW + 1;
+  assert.equal(G.careBlock(s, 'food'), `${G.petName(s)}病危了，先用安心药箱或回春灵药挽回`);
+});
+
 test('sleep: nanny pauses billing and care while the pet sleeps', () => {
   const s = pet('baby');
   s.points = 2000;
