@@ -344,6 +344,9 @@
 .ops-hbar-fill{display:block;height:100%;border-radius:6px}
 .ops-hbar b{text-align:right;color:#5d6b52;font-weight:600}
 
+/* Pet reacts when a bid for attention is answered in time */
+.room-art.moment-joy .pet-breathe{animation:pet-love .9s ease}
+
 /* Sleep banner: shown while the pet naps after a comforting rest */
 .sleep-banner{display:flex;align-items:center;gap:12px;margin:12px 0;border:1px solid #c9d3e0;background:#eef3f9;border-radius:12px;padding:12px 14px;color:#4a5a70;line-height:1.7}
 .sleep-banner[hidden]{display:none}

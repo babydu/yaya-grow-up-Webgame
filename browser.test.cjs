@@ -384,9 +384,9 @@ const assert = require('node:assert/strict');
     assert.equal(fresh.status, 'alive');
     await page.evaluate(() => { state.momentDueAt = Date.now() - 1000; });
     await page.locator('#moment-card').waitFor({ state: 'visible', timeout: 2000 });
-    assert.match(await page.locator('#moment-card').innerText(), /嗝|球|噩梦/);
+    assert.match(await page.locator("#moment-card").innerText(), /还剩 \d+ 秒/);
     const habit = await page.locator('#room-art').getAttribute('data-habit');
-    assert.ok(['wag', 'spin', 'run'].includes(habit), `dog habit was ${habit}`);
+    assert.ok(typeof habit === 'string' && habit.length > 0, `dog habit was ${habit}`);
     const momentHit = await page.evaluate(() => {
       const before = state.bond;
       document.getElementById('moment-hit').click();
@@ -398,7 +398,7 @@ const assert = require('node:assert/strict');
     assert.match(momentHit.log, /亲密度 \+2/);
     await page.evaluate(() => { state.momentDueAt = Date.now() - 1000; momentQuietUntil = 0; document.dispatchEvent(new Event('visibilitychange')); });
     await page.locator('#moment-card').waitFor({ state: 'visible', timeout: 2000 });
-    assert.match(await page.locator('#moment-card').innerText(), /嗝|球|噩梦/);
+    assert.match(await page.locator("#moment-card").innerText(), /还剩 \d+ 秒/);
     await page.locator('#moment-hit').click();
     assert.equal(await page.locator('#moment-card').isVisible(), false);
     // A growth-stage promotion shows a one-time memorial card over the room.

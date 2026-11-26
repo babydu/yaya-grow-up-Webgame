@@ -120,17 +120,44 @@
     cat: [
       { id: 'cat-hiccup', prompt: '{name}打了个小小的嗝，想让你拍拍背。', action: '轻轻拍拍背', habit: 'knead' },
       { id: 'cat-ball', prompt: '{name}盯着毛线球，想玩一会儿。', action: '陪它玩球', habit: 'pounce' },
-      { id: 'cat-dream', prompt: '{name}睡着时忽然抖了一下，像做了噩梦。', action: '安抚一下', habit: 'twitch' }
+      { id: 'cat-dream', prompt: '{name}睡着时忽然抖了一下，像做了噩梦。', action: '安抚一下', habit: 'twitch' },
+      { id: 'cat-belly', prompt: '{name}走着走着「啪」地翻倒，露出毛茸茸的肚皮。', action: '摸摸小肚皮', habit: 'roll' },
+      { id: 'cat-groom', prompt: '{name}舔着舔着毛停了下来，脖子够不着。', action: '帮它顺顺毛', habit: 'groom' },
+      { id: 'cat-gift', prompt: '{name}叼来一片落叶，小心翼翼放在你脚边。', action: '收下这份心意', habit: 'gift' },
+      { id: 'cat-nip', prompt: '{name}闻到猫薄荷的味道，在原地快乐打滚。', action: '陪着它傻乐', habit: 'roll' },
+      { id: 'cat-bird', prompt: '{name}盯着窗外的麻雀，尾巴尖兴奋地抖来抖去。', action: '一起看小鸟', habit: 'watch' },
+      { id: 'cat-freeze', prompt: '{name}舔毛舔到一半忽然定格，小舌头还露在外面。', action: '戳戳小鼻子', habit: 'freeze' },
+      { id: 'cat-purr', prompt: '{name}趴在你手边，喉咙里发出了小小的呼噜声。', action: '轻轻挠挠下巴', habit: 'purr' },
+      { id: 'cat-box', prompt: '{name}发现了一个空纸箱，正犹豫要不要钻进去。', action: '帮它打开盖子', habit: 'hide' },
+      { id: 'cat-paw', prompt: '{name}伸出一只毛茸茸的小爪子，轻轻按在你的手背上。', action: '握住小爪子', habit: 'paw' }
     ],
     dog: [
       { id: 'dog-hiccup', prompt: '{name}打了个响嗝，有点不好意思。', action: '摸摸肚子', habit: 'wag' },
       { id: 'dog-ball', prompt: '{name}把球推到你脚边，眼睛亮亮的。', action: '扔一次球', habit: 'spin' },
-      { id: 'dog-dream', prompt: '{name}睡着后腿在空中蹬了蹬，像在跑一场噩梦。', action: '轻声安慰', habit: 'run' }
+      { id: 'dog-dream', prompt: '{name}睡着后腿在空中蹬了蹬，像在跑一场噩梦。', action: '轻声安慰', habit: 'run' },
+      { id: 'dog-wag', prompt: '{name}看到你，尾巴摇得整间屋子都在震动。', action: '揉揉狗头', habit: 'wag' },
+      { id: 'dog-belly', prompt: '{name}「咚」地躺倒，四脚朝天露出肚子。', action: '挠挠肚皮', habit: 'roll' },
+      { id: 'dog-slipper', prompt: '{name}鬼鬼祟祟地把你的拖鞋叼到了窝里。', action: '假装没看见', habit: 'hide' },
+      { id: 'dog-bury', prompt: '{name}在角落认真地刨着垫子，想把小骨头藏好。', action: '帮它挡挡视线', habit: 'dig' },
+      { id: 'dog-door', prompt: '{name}竖起耳朵，冲门口小声哼哼。', action: '陪它去看一眼', habit: 'watch' },
+      { id: 'dog-tail', prompt: '{name}追着自己的尾巴转了三圈，把自己转晕了。', action: '拦住小憨憨', habit: 'spin' },
+      { id: 'dog-chin', prompt: '{name}慢慢走过来，把下巴搁在了你的脚背上。', action: '一动不动地陪着', habit: 'chin' },
+      { id: 'dog-shake', prompt: '{name}哼唧着想出门，尾巴摇得有点心虚。', action: '带它出去走走', habit: 'wag' },
+      { id: 'dog-yawn', prompt: '{name}打了一个好大好大的哈欠，露出一排小牙。', action: '摸摸小脑袋', habit: 'yawn' }
     ],
     baby: [
       { id: 'baby-hiccup', prompt: '{name}打嗝了，小肩膀一抖一抖。', action: '轻轻拍背', habit: 'clap' },
       { id: 'baby-ball', prompt: '{name}伸出手，想够那个小球。', action: '递过去', habit: 'reach' },
-      { id: 'baby-dream', prompt: '{name}睡着后皱了皱眉，像做了噩梦。', action: '轻轻哄哄', habit: 'suck' }
+      { id: 'baby-dream', prompt: '{name}睡着后皱了皱眉，像做了噩梦。', action: '轻轻哄哄', habit: 'suck' },
+      { id: 'baby-bubble', prompt: '{name}吐出了一个小小的口水泡泡，自己看得入迷。', action: '轻轻擦掉', habit: 'blow' },
+      { id: 'baby-grip', prompt: '{name}伸出小手，一把抓住了你的手指，抓得紧紧的。', action: '由着它握一会儿', habit: 'grip' },
+      { id: 'baby-peek', prompt: '{name}用小手挡住脸，又悄悄移开，眼睛亮晶晶的。', action: '配合着「喵」一声', habit: 'peek' },
+      { id: 'baby-laugh', prompt: '{name}被一个鬼脸逗得咯咯直笑，笑得停不下来。', action: '再做一个鬼脸', habit: 'laugh' },
+      { id: 'baby-flip', prompt: '{name}哼哧哼哧地努力，想把自己翻过去。', action: '在旁边护着', habit: 'flip' },
+      { id: 'baby-babble', prompt: '{name}咿咿呀呀说了一大串，语气特别认真。', action: '认真地回答它', habit: 'babble' },
+      { id: 'baby-pacifier', prompt: '{name}的安抚奶嘴掉了，小嘴瘪了瘪。', action: '捡起来擦擦', habit: 'suck' },
+      { id: 'baby-mirror', prompt: '{name}盯着镜子里的自己，伸出小手想摸摸。', action: '抱着靠近一点', habit: 'watch' },
+      { id: 'baby-kick', prompt: '{name}精神十足地踢蹬着小被子，把被子踢到床尾。', action: '重新盖好被子', habit: 'kick' }
     ],
     plant: []
   };

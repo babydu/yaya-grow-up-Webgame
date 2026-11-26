@@ -518,7 +518,15 @@ function finishMoment(outcome, notice) {
   momentQuietUntil=Date.now()+2000;
   try {
     G.resolveMoment(state,now(),outcome,Math.random());
-    if(outcome==='hit')G.completeDailyTask(state,'moment',now());
+    if(outcome==='hit'){
+      G.completeDailyTask(state,'moment',now());
+      // The pet reacts to a answered bid: a small joyful bounce from the room art.
+      const art=$('room-art');
+      art.classList.remove('moment-joy');
+      void art.offsetWidth;
+      art.classList.add('moment-joy');
+      setTimeout(()=>art.classList.remove('moment-joy'),900);
+    }
     clearMomentCard();
     save();
     render();

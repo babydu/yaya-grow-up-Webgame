@@ -1151,14 +1151,15 @@ test('short moments: plant stays quiet, companions get 10s prompts', () => {
   assert.ok(G.profiles.plant.rhythm.includes('安静'));
   for (const type of ['cat', 'dog', 'baby']) {
     const pool = G.moments(type);
-    assert.equal(pool.length, 3);
+    assert.equal(pool.length, 12);
     assert.ok(pool.some(m => m.id.endsWith('hiccup')));
     assert.ok(pool.some(m => m.id.endsWith('ball')));
     assert.ok(pool.some(m => m.id.endsWith('dream')));
+    // Enriched pool keeps ids unique so the no-repeat pick never stalls.
+    assert.equal(new Set(pool.map(m => m.id)).size, pool.length);
     assert.match(G.profiles[type].rhythm, /10 秒/);
     // Every companion moment carries a signature habit for its portrait.
     assert.ok(pool.every(m => typeof m.habit === 'string' && m.habit.length > 0));
-    assert.equal(new Set(pool.map(m => m.habit)).size, 3);
   }
   const plant = pet('plant');
   assert.equal(plant.momentDueAt, null);
