@@ -1555,3 +1555,102 @@ test('price overrides apply globally, validate values and reset to defaults', ()
   G.applyPriceOverrides({});
   assert.equal(milk(), base['cat-milk']);
 });
+
+test('sleep: a finished rest puts pet to sleep and blocks all care', () => {
+  const s = pet('baby');
+  assert.equal(s.sleepAt, null);
+  s.needs[3] = 55; // tired enough that the rest leaves drowsiness to sleep on
+  complete(s, 'energy');
+  assert.ok(s.sleepAt !== null, 'pet falls asleep after a comforting rest');
+  assert.equal(s.lastWakeAt, null);
+  // All care actions are gently blocked while asleep.
+  for (const id of ['food', 'clean', 'mood', 'energy']) {
+    const block = G.careBlock(s, id);
+    assert.ok(typeof block === 'string' && block.includes('睡'), `${id} blocked while asleep`);
+    assert.ok(typeof G.begin(s, id, null, NOW + 60) === 'string', `${id} begin refused while asleep`);
+  }
+  const stt = G.sleepStatus(s, NOW + 120);
+  assert.equal(stt.asleep, true);
+  assert.ok(stt.label.includes('睡'));
+});
+
+test('sleep: energy recovers faster at night and needs still decay', () => {
+  const NIGHT = new Date(2026, 0, 31, 23).getTime();
+  G.configureNight({ enabled: true, start: 22, end: 6 });
+  const s = G.adopt(G.create(NIGHT - 5000), 'cat', NIGHT - 4000);
+  s.needs[3] = 50;
+  s.sleepAt = s.updated; // asleep: rest already finished, energy mid-recovery
+  const food0 = s.needs[0];
+  G.refresh(s, NIGHT + 2 * HOUR);
+  assert.ok(Math.abs(s.needs[3] - 70) < 0.5, 'night sleep recovers +10 per hour');
+  assert.ok(s.needs[0] < food0, 'hunger still decays while asleep');
+  G.configureNight({ enabled: false, start: 22, end: 6 });
+});
+
+test('sleep: pet wakes on its own once energy is full', () => {
+  const s = pet('cat');
+  s.needs[3] = 55;
+  complete(s, 'energy');
+  assert.ok(G.isAsleep(s));
+  s.needs[3] = 99.5;
+  G.refresh(s, NOW + 3 * HOUR);
+  assert.equal(s.sleepAt, null, 'auto-wake at full energy');
+  assert.equal(s.needs[3], 100);
+  assert.ok(s.logs.some(l => l.text.includes('睡饱了')), 'logs the natural wake-up');
+  assert.equal(G.isAsleep(s), false);
+});
+
+test('sleep: wake() ends the nap and lifts the care lock', () => {
+  const s = pet('dog');
+  s.needs[3] = 55;
+  complete(s, 'energy');
+  assert.ok(G.isAsleep(s));
+  s.needs[3] = 50;
+  assert.equal(G.wake(s, NOW + 2 * HOUR), null);
+  assert.equal(s.sleepAt, null);
+  assert.ok(s.lastWakeAt !== null);
+  assert.equal(G.careBlock(s, 'food'), null);
+});
+
+test('sleep: awake at night drains energy faster (drowsy)', () => {
+  const NIGHT = new Date(2026, 0, 31, 23).getTime();
+  G.configureNight({ enabled: true, start: 22, end: 6 });
+  const s = G.adopt(G.create(NIGHT - 5000), 'cat', NIGHT - 4000);
+  s.needs[3] = 80;
+  G.refresh(s, NIGHT + 2 * HOUR);
+  assert.ok(Math.abs(s.needs[3] - 50) < 0.05, 'awake at night drains 10*1.5 per hour');
+  G.configureNight({ enabled: false, start: 22, end: 6 });
+});
+
+test('sleep: health loss is halved while asleep', () => {
+  const s = pet('cat');
+  s.needs[3] = 55;
+  complete(s, 'energy');
+  s.needs = [5, 5, 5, 40];
+  const h0 = s.health;
+  G.refresh(s, NOW + 2 * HOUR);
+  assert.ok(s.health > h0 - 3, 'health drains at half rate while asleep');
+  assert.ok(s.health < h0, 'still slowly declines when starving');
+});
+
+test('sleep: plants never enter the sleep model', () => {
+  const s = pet('plant');
+  complete(s, 'energy', 'plant-milk');
+  assert.equal(s.sleepAt, null, 'fertilising never sleeps the plant');
+  assert.equal(G.careBlock(s, 'food'), null);
+  assert.equal(G.isAsleep(s), false);
+});
+
+test('sleep: nanny pauses billing and care while the pet sleeps', () => {
+  const s = pet('baby');
+  s.points = 2000;
+  G.nannyStart(s, NOW + 1000);
+  s.needs[3] = 55;
+  complete(s, 'energy');
+  s.needs[3] = 50;
+  const points0 = s.points;
+  const r = G.nanny(s, NOW + 2 * HOUR);
+  assert.equal(r.cared.length, 0, 'sitter does not wake the pet to feed it');
+  assert.equal(s.points, points0, 'no babysitting fee while asleep');
+  G.nannyStop(s);
+});

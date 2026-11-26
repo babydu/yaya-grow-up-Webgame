@@ -289,6 +289,16 @@ function render() {
   if (roomBottom) roomBottom.hidden = gone;
   $('bond-card').innerHTML = `<span class="bond-icon">${icon('heart')}</span><div><strong>${['开始熟悉你','已经很依赖你','你是最安心的存在'][state.bond>=65?2:state.bond>=30?1:0]}</strong><p>${emotion()}</p></div><div class="bond-score"><b>${Math.round(state.bond)}</b> / 100<small>亲密度</small></div>`;
   renderToolbox();
+  const asleep = !gone && G.isAsleep(state);
+  const sleepBanner = $('sleep-banner');
+  if (sleepBanner) {
+    sleepBanner.hidden = !asleep;
+    if (asleep) {
+      const stt = G.sleepStatus(state, now());
+      const gain = G.isNightMs(now()) ? G.SLEEP_GAIN_NIGHT : G.SLEEP_GAIN_DAY;
+      sleepBanner.innerHTML = `<span class="sleep-icon">${icon('moon')}</span><div><strong>${escapeHtml(stt.label)}</strong><p>${escapeHtml(stt.desc)}精力正在慢慢回复（每小时 +${gain}），饿了或尿了会自己醒来。</p></div><button class="sleep-wake" data-wake="1">轻轻叫醒</button>`;
+    }
+  }
   $('care-cards').innerHTML = actions.map((a,i) => {
     const task = state.task?.actionId === a.id;
     const due = now() >= a.dueAt;
@@ -300,7 +310,8 @@ function render() {
     const stock = supplies.reduce((sum,p) => sum+(state.inventory[p.id] || 0),0);
     const status = gone ? (state.selected === 'plant' ? '这一季已经结束' : '已经离开小屋') : task ? '进度已保留' : blocked ? blockReason : satisfied ? '状态很好，稍后再来' : timeUntil(a.dueAt);
     const stockLine = supplies.length ? `适龄物资 ${stock} 份` : '用陪伴回应需要';
-    const label = task ? '继续照护' : blocked ? (state.criticalAt !== null ? '病危中，先用药' : '先照顾身体') : satisfied ? '安心休息' : !due ? '稍后再来' : a.name;
+    const asleepNow = !gone && G.isAsleep(state);
+    const label = task ? '继续照护' : asleepNow ? '它在睡觉' : blocked ? (state.criticalAt !== null ? '病危中，先用药' : '先照顾身体') : satisfied ? '安心休息' : !due ? '稍后再来' : a.name;
     return `<article class="care-card ${blocked?'blocked ':''}${!unavailable && state.needs[i]<50?'urgent':''}"><div class="care-card-top"><span class="care-icon">${icon(a.icon)}</span><span class="duration">${icon('clock')}${duration(a.seconds)}</span></div><h3>${a.name}</h3><p class="care-frequency">每 ${a.intervalHours} 小时关注一次</p><div class="care-stock">${stockLine}</div><small class="care-due">${status}</small><button class="care-action" data-care="${a.id}" ${unavailable?'disabled':''}>${label}${icon('arrow')}</button></article>`;
   }).join('');
   $('total-minutes').innerHTML = `${Math.floor(state.daily.seconds/60)} <small>分钟</small>`;
@@ -837,6 +848,7 @@ document.addEventListener('click',e=>{
   if(b.dataset.supply!==undefined){careProduct=b.dataset.supply;careQuantity=1;renderSupplyPicker();updateTimer();return;}
   if(b.id==='quantity-minus'||b.id==='quantity-plus'){careQuantity=Math.max(1,Math.min(careQuantity+(b.id==='quantity-plus'?1:-1),careMaxQ));renderSupplyPicker();updateTimer();return;}
   if(b.dataset.page)navigate(b.dataset.page);
+  if(b.dataset.wake){execute(()=>G.wake(state,now()),`${G.petName(state)}揉了揉眼睛，慢慢醒来了。`);return;}
   if(b.dataset.care)showCare(b.dataset.care);
   if(b.dataset.filter){shopFilter=b.dataset.filter;renderSecondary();}
   const departed=state.status==='left';

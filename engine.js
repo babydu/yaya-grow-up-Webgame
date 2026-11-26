@@ -46,6 +46,42 @@
   function paceHours(hours) {
     return hours * PACE[pace];
   }
+  // ---- sleep model ----
+  // "安抚休息" puts cat/dog/baby to sleep (plant energy is fertilising, not
+  // sleep). While asleep every other care is blocked (you don't feed or play
+  // with a sleeping child), energy regenerates instead of draining, and
+  // overnight hunger/comfort keep falling at full speed so the first thing a
+  // player does in the morning is feed and change. Health damage is halved so
+  // letting a pet sleep can never push it into the critical window.
+  const SLEEP_GAIN_DAY = 6;    // energy/hour regained while asleep by day
+  const SLEEP_GAIN_NIGHT = 10; // deeper sleep during the night window
+  const NIGHT_DROWSY = 1.5;    // awake energy drains faster at night
+  const SLEEP_HEALTH_SHIELD = 0.5;
+  function isAsleep(s) {
+    return !!s.adopted && s.status === 'alive' && s.selected !== 'plant' && s.sleepAt !== null && s.sleepAt !== undefined;
+  }
+  function isNightMs(t) {
+    return nightSpanMs(t, t + 60000) > 0;
+  }
+  function sleepStatus(s, now) {
+    const asleep = isAsleep(s);
+    const night = isNightMs(now || s.updated);
+    return {
+      asleep,
+      since: asleep ? s.sleepAt : null,
+      energyRate: asleep ? (night ? SLEEP_GAIN_NIGHT : SLEEP_GAIN_DAY) : 0,
+      night,
+      label: asleep ? (night ? '正在熟睡 · 夜深好眠' : '正在午睡 · 轻一点') : null
+    };
+  }
+  function wake(s, now) {
+    refresh(s, now);
+    if (!isAsleep(s)) return s.selected === 'plant' ? '植物安静生长，不需要叫醒' : '它正醒着';
+    log(s, now, `${petName(s)}醒了，伸了个懒腰。`);
+    s.sleepAt = null;
+    s.lastWakeAt = now;
+    return null;
+  }
   const ages = [0, 30, 180, 360];
   const experience = [0, 100, 300, 600];
   const names = ['初生期', '探索期', '成长期', '成年期'];
@@ -439,6 +475,7 @@
       needs: [40, 75, 65, 70], xp: 0, count: 0, seconds: 0, bond: 0, points: 60,
       inventory: {}, logs: [], task: null, lastCare: {}, emotionalMilestones: [], worn: emptyWorn(), tints: {},
       health: 100, status: 'alive', criticalAt: null, leftAt: null, name: null,
+      sleepAt: null, lastWakeAt: null,
       daily: freshDaily(now),
       checkin: { date: '', streak: 0 }, reliefDate: '', stageIndex: 0, lastTouch: null,
       momentDueAt: null, momentLastId: null, nannyAt: null, nannyDebt: 0 };
@@ -491,17 +528,38 @@
     const span = now - s.updated;
     const restMs = nightSpanMs(s.updated, now);
     // Night hours advance growth pressure at half speed; recovery follows real time.
-    const activeHours = (span - restMs) / HOUR + (restMs / HOUR) * NIGHT_RATE;
+    const dayH = (span - restMs) / HOUR;
+    const nightH = restMs / HOUR;
+    const activeHours = dayH + nightH * NIGHT_RATE;
     const hours = span / HOUR;
     s.updated = now;
+    const asleep = isAsleep(s);
     // Apply the destination stage's rates to the entire elapsed interval.
     if (s.selected) {
       const options = careOptions(s);
-      s.needs = s.needs.map((v, i) => Math.max(0, v - activeHours * options[i].gain / options[i].intervalHours));
+      s.needs = s.needs.map((v, i) => {
+        const rate = options[i].gain / options[i].intervalHours;
+        if (i === 3) {
+          // Energy: drains while awake (faster at night), recovers while asleep
+          // (deeper recovery during the night window).
+          if (asleep) return Math.min(100, v + dayH * SLEEP_GAIN_DAY + nightH * SLEEP_GAIN_NIGHT);
+          return Math.max(0, v - (dayH + nightH * NIGHT_DROWSY) * rate);
+        }
+        // Hunger/comfort keep falling at full speed while asleep; a sleeping
+        // child still gets hungry, so mornings start with real needs.
+        return Math.max(0, v - (asleep ? hours : activeHours) * rate);
+      });
+      if (asleep && s.needs[3] >= 100) {
+        log(s, now, `${petName(s)}睡饱了，自己醒了过来。`);
+        s.sleepAt = null;
+        s.lastWakeAt = now;
+      }
     }
     if (s.adopted && s.status === 'alive') {
       const starving = s.needs.filter(v => v < 10).length;
-      if (starving > 0) s.health = Math.max(0, s.health - Math.min(3, starving * 0.75) * activeHours);
+      // Sleep shields health: needs still deplete but the body copes better.
+      const healthHours = asleep ? hours * SLEEP_HEALTH_SHIELD : activeHours;
+      if (starving > 0) s.health = Math.max(0, s.health - Math.min(3, starving * 0.75) * healthHours);
       else if (s.needs.every(v => v >= 30)) s.health = Math.min(100, s.health + hours);
       let bondDrain = 0.1;
       if (starving > 0) bondDrain += Math.min(0.8, starving * 0.25);
@@ -636,6 +694,7 @@
   }
   function careBlock(s, actionId) {
     if (s.status === 'left') return departedCopy(s);
+    if (isAsleep(s)) return `${petName(s)}正睡得香，喂养、清洁和玩耍都先等它醒来`;
     if (s.criticalAt !== null) return `${petName(s)}病危了，先用安心药箱或回春灵药挽回`;
     if (s.health < 20 && actionId === 'mood') return `${petName(s)}太虚弱了，先照顾好身体`;
     return null;
@@ -707,6 +766,15 @@
     const label = units > 1 ? `${t.name} × ${units}` : t.name;
     const message = noPoints ? `${label}完成，成长 +${growth}。` : `${label}完成，成长 +${growth}，积分 +${points}。`;
     log(s, now, message);
+    // A finished rest puts cat/dog/baby to sleep: needs then freeze for care
+    // while energy recovers on its own. A pet whose energy is already full
+    // (the rest itself tops it up) has no drowsiness left to sleep on.
+    // Plants skip the sleep model.
+    if (t.actionId === 'energy' && s.selected !== 'plant' && s.needs[3] < 100) {
+      s.sleepAt = now;
+      s.lastWakeAt = null;
+      log(s, now, `${petName(s)}安静地睡着了，呼吸变得轻而均匀。`);
+    }
     rewardStages(s, now, noPoints);
     rewardEmotions(s, now, noPoints);
     return { title: '照护完成', message, points };
@@ -870,6 +938,9 @@
     let blocked = null;
     refresh(s, now);
     if (!s.adopted || s.status !== 'alive' || s.criticalAt !== null || s.task) return { cared, blocked };
+    // Sleeping pet needs no feeding or play: pause billing so the sitter does
+    // not charge for idling beside the crib.
+    if (isAsleep(s)) { nannyPause(s, now); return { cared, blocked }; }
     const paidActions = s.selected === 'plant' ? ['energy', 'clean'] : ['food', 'clean'];
     for (let pass = 0; pass < 4; pass++) {
       const options = careOptions(s);
@@ -994,6 +1065,8 @@
       if (s.tints === undefined) s.tints = {};
       if (s.nannyAt === undefined) s.nannyAt = null;
       if (!Number.isFinite(s.nannyDebt)) s.nannyDebt = 0;
+      if (s.sleepAt === undefined) s.sleepAt = null;
+      if (s.lastWakeAt === undefined) s.lastWakeAt = null;
       ensureDaily(s);
       if (s.status === undefined) { s.status = 'alive'; s.criticalAt = null; s.leftAt = null; }
       // Older saves kept the critical-window rescue promise after departure.
@@ -1041,6 +1114,7 @@
     nannyStart, nannyStop, nannyPause, nannyCharge, NANNY_RATE,
     applyPriceOverrides, basePrices,
     remedy, restart, healthTier, configureNight, configurePace, criticalRemaining, petName, nanny,
+    isAsleep, sleepStatus, wake, isNightMs, SLEEP_GAIN_DAY: SLEEP_GAIN_DAY, SLEEP_GAIN_NIGHT: SLEEP_GAIN_NIGHT,
     accessorySlot, isEquipped, careQuantityCap, dye, DYE, STAGES,
     moments, scheduleMoment, startMoment, resolveMoment });
 });
