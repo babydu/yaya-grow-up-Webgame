@@ -436,7 +436,8 @@
     { key: 'moment', label: '回应一次小心思', reward: 4 },
     { key: 'knowledge', label: '读一篇养育课堂', reward: 4 }
   ];
-  const VIGIL_SECONDS = 150;
+  let vigilSeconds = 150;
+  const VIGIL_SECONDS = () => vigilSeconds;
   function freshDaily(now) {
     return { date: date(now), seconds: 0, count: 0, earned: 0, vigil: false,
       tasks: { care: false, moment: false, knowledge: false } };
@@ -474,9 +475,13 @@
   // A last-resort safety line: when the pet is in the critical window, owns no
   // elixir and cannot afford one, the player may spend a short vigil to top up
   // to exactly the elixir price. Once per day, so it never replaces sign-in.
+  function configureVigil(seconds) {
+    assert(integer(seconds, 600) && seconds >= 60, '守夜时长须为 60 至 600 秒之间的整数');
+    vigilSeconds = seconds;
+  }
   function vigilStatus(s) {
     const target = elixirPrice();
-    const base = { seconds: VIGIL_SECONDS, target };
+    const base = { seconds: vigilSeconds, target };
     if (!s.adopted) return { available: false, reason: '请先确认养育对象', ...base };
     if (s.status === 'left') return { available: false, reason: '它已经离开了', ...base };
     if (s.criticalAt === null) return { available: false, reason: '还没到最紧急的时候', ...base };
@@ -1139,7 +1144,8 @@
   }
   return Object.freeze({ profiles, catalog, create, adopt, load, stage, refresh, careOptions,
     products, begin, advance, checkin, buy, wear, relief, touch, milestones, careBlock,
-    vigilStatus, claimVigil, dailyTasks, markKnowledgeTask, VIGIL_SECONDS,
+    vigilStatus, claimVigil, dailyTasks, markKnowledgeTask,
+    VIGIL_SECONDS, configureVigil,
     completeDailyTask: rewardDailyTask,
     nannyStart, nannyStop, nannyPause, nannyCharge, NANNY_RATE,
     applyPriceOverrides, basePrices,

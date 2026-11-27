@@ -718,7 +718,7 @@ const assert = require('node:assert/strict');
         return { hasBtn: !!btn, text: btn ? btn.textContent : '' };
       });
       assert.equal(vig.hasBtn, true);
-      assert.ok(vig.text.includes("守夜") && vig.text.includes("须全程陪同"), vig.text);
+      assert.ok(vig.text.includes("为它守夜"), vig.text);
       await ecoPage.locator('#vigil-button').click();
       await ecoPage.locator('#vigil-dialog').waitFor({ state: 'visible' });
       assert.match(await ecoPage.locator('#vigil-timer').innerText(), /^\d{2}:\d{2}$/);

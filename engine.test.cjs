@@ -1496,6 +1496,23 @@ test('vigil safety net tops up to the elixir price only when truly stuck', () =>
   assert.equal(G.vigilStatus(h).available, false);
 });
 
+test('vigil duration is configurable between 60 and 600 seconds', () => {
+  const s = pet();
+  s.health = 0; s.criticalAt = s.updated; s.points = 0; s.inventory = {};
+  assert.equal(G.vigilStatus(s).seconds, 150);
+  G.configureVigil(90);
+  assert.equal(G.vigilStatus(s).seconds, 90);
+  G.configureVigil(60);
+  G.configureVigil(600);
+  // Out of range values are rejected, previous value kept.
+  for (const bad of [59, 601, 0, -60, 150.5, '120', NaN]) {
+    assert.throws(() => G.configureVigil(bad));
+  }
+  assert.equal(G.vigilStatus(s).seconds, 600);
+  G.configureVigil(150);
+  assert.equal(G.vigilStatus(s).seconds, 150);
+});
+
 test('nanny babysitting fee: charges per hour, pauses when off, stops when broke', () => {
   const s = pet();
   s.points = 100;

@@ -58,6 +58,12 @@ try{
   if(rawNight&&typeof rawNight.enabled==='boolean'&&Number.isInteger(rawNight.start)&&Number.isInteger(rawNight.end)&&rawNight.start>=0&&rawNight.start<=23&&rawNight.end>=0&&rawNight.end<=23)night=rawNight;
 }catch{}
 G.configureNight(night);
+let vigilSeconds=150;
+try{
+  const rawVigil=Number(localStorage.getItem('slow-growing-vigil'));
+  if(Number.isInteger(rawVigil)&&rawVigil>=60&&rawVigil<=600)vigilSeconds=rawVigil;
+}catch{}
+G.configureVigil(vigilSeconds);
 const PACE_IDS=['tight','normal','relaxed'];
 let carePace='normal';
 try{
@@ -224,7 +230,7 @@ function render() {
     const reason = windowed ? `健康度已经耗尽，约 ${hours} 小时后会悄悄离开。${hint}` : `健康度已经很低，再不照顾就有离开的风险。${hint}`;
     const reviveLabel = elixirOwned ? '使用回春灵药（+60）' : kitUsable ? '使用安心药箱（+40）' : '购买并使用回春灵药（60 积分）';
     const vig = G.vigilStatus(state);
-    const vigilBtn = vig.available ? `<button class="secondary" type="button" id="vigil-button">守夜求药（约 ${Math.round(vig.seconds/60)} 分钟·须全程陪同）</button>` : '';
+    const vigilBtn = vig.available ? `<button class="secondary" type="button" id="vigil-button">为它守夜（约 ${Math.round(vig.seconds/60)} 分钟）</button>` : '';
     $('critical-banner').hidden = false;
     $('critical-banner').innerHTML = `<div class="critical-copy"><strong>${escapeHtml(petName())}病危了</strong><p>${reason}</p></div><div class="critical-actions"><button class="primary" id="revive-button">${reviveLabel}</button>${vigilBtn}</div>`;
   } else $('critical-banner').hidden = true;
@@ -462,7 +468,7 @@ function renderSecondary() {
     el.innerHTML=`<div class="page-panel"><div class="eyebrow">LEARN WHILE YOU CARE</div><div class="section-heading"><h2>养育课堂</h2><span class="points-pill">${icon('bulb')} 已了解 ${readCount} / ${list.length} 篇</span></div><p>游戏里的每一次照料，都有真实世界的对应。这里收集了${escapeHtml(petName())}（${profile().kind}）相关的通用养护知识，点击卡片展开阅读。</p>${groups}<p class="knowledge-disclaimer">以上内容为游戏化科普摘要，具体的养育决策请咨询儿科医生、兽医或园艺专业人士。</p></div>`;
   } else {
     const bgCount=['food','clean','mood','energy'].filter(id=>backgroundCare[id]).length;
-    el.innerHTML=`<div class="page-panel"><div class="eyebrow">MAKE YOURSELF AT HOME</div><h2>偏好与存档</h2><label class="setting-row"><span>应用内照护提醒<small>页面打开时提醒低需求；系统后台推送尚未接入。</small></span><input type="checkbox" id="reminders" ${reminderEnabled?'checked':''}></label><label class="setting-row"><span>背景音乐<small>照护进行时播放实时合成的音景，全部由浏览器本地生成，无外部音频文件。若手机处于静音模式（iOS 侧边拨片），请先取消静音。</small></span><input type="checkbox" id="bgm-enabled" ${A.pref.enabled?'checked':''}></label><label class="setting-row"><span>音景风格<small>白噪音、雨声、海浪、八音盒轻音乐、森林晨间，照护中切换即刻生效。</small></span><select id="bgm-style">${A.stylesHtml(A.pref.style)}</select></label><label class="setting-row"><span>音乐音量<small>当前 ${Math.round(A.pref.volume*100)}%，只影响背景音景。</small></span><input type="range" id="bgm-volume" min="0" max="100" value="${Math.round(A.pref.volume*100)}" style="--fill:${Math.round(A.pref.volume*100)}%"></label><label class="setting-row"><span>贴心管家<small>到点或需求过低时自动照料，按小时扣除积分（约 10 分/小时），且托管照护不产生照护积分；库存不足时按双倍积分自动补货，病危时仍需你亲手用药。</small></span><input type="checkbox" id="nanny-enabled" ${nannyOn?'checked':''}></label><div class="setting-row"><span>后台照护<small>勾选后，对应照护在切到其他标签页、应用或锁屏时按真实时间继续；关闭照护弹窗或整个页面仍会暂停并保留进度。</small></span><div class="bg-grid">${(state.selected==='plant'?[['food','浇水'],['clean','擦叶'],['mood','晒太阳'],['energy','施肥']]:[['food','喂养'],['clean','清洁'],['mood','陪伴'],['energy','休息']]).map(([id,name])=>`<label class="bg-check"><input type="checkbox" data-bg="${id}" ${backgroundCare[id]?'checked':''}>${name}</label>`).join('')}</div></div><label class="setting-row"><span>养育节奏<small>调整两次照护之间的关注间隔，需求下降速度一并缩放。单次照护时长不变。默认正常。</small></span><select id="care-pace">${[['tight','紧致 · 稍密'],['normal','正常'],['relaxed','宽松 · 稍疏']].map(([id,name])=>`<option value="${id}" ${id===carePace?'selected':''}>${name}</option>`).join('')}</select></label><div class="setting-row"><span>夜间节奏<small>就寝时段内需求与健康度的下降速度减半，照护与成长计时照常。默认 22 点到次日 6 点。</small></span><div class="night-window"><input type="checkbox" id="night-enabled" ${night.enabled?'checked':''}><select id="night-start" ${night.enabled?'':'disabled'}>${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===night.start?'selected':''}>${h} 点</option>`).join('')}</select><b>至</b><select id="night-end" ${night.enabled?'':'disabled'}>${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===night.end?'selected':''}>${h} 点</option>`).join('')}</select></div></div><div class="setting-row"><span>专心陪伴模式<small>前台照护保持页面可见计时；已允许后台的操作在切后台后继续累计。</small></span><span class="stage-badge">${bgCount?`后台 ${bgCount} 项`:'仅前台'}</span></div><div class="setting-row"><span>成长时间<small>现实 1 天 = 游戏 30 天，升级同时需要有效照护经验。</small></span></div><div class="setting-row"><span>导出存档<small>进度保存在此浏览器，可导出文件备份。</small></span><button class="primary" id="export-save">导出</button></div><label class="setting-row"><span>恢复存档<small>恢复前自动下载当前进度备份；支持本版本的 JSON 存档。</small></span><input id="import-save" type="file" accept=".json,application/json"></label><p>养育节奏、饮食与情绪数值采用游戏化简化。真实宝宝的喂养方式、辅食时机与营养补充，请与儿科专业人员讨论；宠物饮食请咨询兽医。小铺商品均为虚拟物资，使用游戏积分兑换。</p></div>`;
+    el.innerHTML=`<div class="page-panel"><div class="eyebrow">MAKE YOURSELF AT HOME</div><h2>偏好与存档</h2><label class="setting-row"><span>应用内照护提醒<small>页面打开时提醒低需求；系统后台推送尚未接入。</small></span><input type="checkbox" id="reminders" ${reminderEnabled?'checked':''}></label><label class="setting-row"><span>背景音乐<small>照护进行时播放实时合成的音景，全部由浏览器本地生成，无外部音频文件。若手机处于静音模式（iOS 侧边拨片），请先取消静音。</small></span><input type="checkbox" id="bgm-enabled" ${A.pref.enabled?'checked':''}></label><label class="setting-row"><span>音景风格<small>白噪音、雨声、海浪、八音盒轻音乐、森林晨间，照护中切换即刻生效。</small></span><select id="bgm-style">${A.stylesHtml(A.pref.style)}</select></label><label class="setting-row"><span>音乐音量<small>当前 ${Math.round(A.pref.volume*100)}%，只影响背景音景。</small></span><input type="range" id="bgm-volume" min="0" max="100" value="${Math.round(A.pref.volume*100)}" style="--fill:${Math.round(A.pref.volume*100)}%"></label><label class="setting-row"><span>贴心管家<small>到点或需求过低时自动照料，按小时扣除积分（约 10 分/小时），且托管照护不产生照护积分；库存不足时按双倍积分自动补货，病危时仍需你亲手用药。</small></span><input type="checkbox" id="nanny-enabled" ${nannyOn?'checked':''}></label><div class="setting-row"><span>后台照护<small>勾选后，对应照护在切到其他标签页、应用或锁屏时按真实时间继续；关闭照护弹窗或整个页面仍会暂停并保留进度。</small></span><div class="bg-grid">${(state.selected==='plant'?[['food','浇水'],['clean','擦叶'],['mood','晒太阳'],['energy','施肥']]:[['food','喂养'],['clean','清洁'],['mood','陪伴'],['energy','休息']]).map(([id,name])=>`<label class="bg-check"><input type="checkbox" data-bg="${id}" ${backgroundCare[id]?'checked':''}>${name}</label>`).join('')}</div></div><label class="setting-row"><span>养育节奏<small>调整两次照护之间的关注间隔，需求下降速度一并缩放。单次照护时长不变。默认正常。</small></span><select id="care-pace">${[['tight','紧致 · 稍密'],['normal','正常'],['relaxed','宽松 · 稍疏']].map(([id,name])=>`<option value="${id}" ${id===carePace?'selected':''}>${name}</option>`).join('')}</select></label><div class="setting-row"><span>夜间节奏<small>就寝时段内需求与健康度的下降速度减半，照护与成长计时照常。默认 22 点到次日 6 点。</small></span><div class="night-window"><input type="checkbox" id="night-enabled" ${night.enabled?'checked':''}><select id="night-start" ${night.enabled?'':'disabled'}>${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===night.start?'selected':''}>${h} 点</option>`).join('')}</select><b>至</b><select id="night-end" ${night.enabled?'':'disabled'}>${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===night.end?'selected':''}>${h} 点</option>`).join('')}</select></div></div><label class="setting-row"><span>守夜时长<small>病危时，守一夜能把回春灵药等来（60 积分，每日一次）。选一段你守得住的时光——这一页要一直亮着，你也要一直在。</small></span><select id="vigil-duration">${[[60,'1 分钟'],[90,'1.5 分钟'],[120,'2 分钟'],[150,'2.5 分钟'],[180,'3 分钟'],[300,'5 分钟'],[600,'10 分钟']].map(([sec,name])=>`<option value="${sec}" ${sec===vigilSeconds?'selected':''}>${name}</option>`).join('')}</select></label><div class="setting-row"><span>专心陪伴模式<small>前台照护保持页面可见计时；已允许后台的操作在切后台后继续累计。</small></span><span class="stage-badge">${bgCount?`后台 ${bgCount} 项`:'仅前台'}</span></div><div class="setting-row"><span>成长时间<small>现实 1 天 = 游戏 30 天，升级同时需要有效照护经验。</small></span></div><div class="setting-row"><span>导出存档<small>进度保存在此浏览器，可导出文件备份。</small></span><button class="primary" id="export-save">导出</button></div><label class="setting-row"><span>恢复存档<small>恢复前自动下载当前进度备份；支持本版本的 JSON 存档。</small></span><input id="import-save" type="file" accept=".json,application/json"></label><p>养育节奏、饮食与情绪数值采用游戏化简化。真实宝宝的喂养方式、辅食时机与营养补充，请与儿科专业人员讨论；宠物饮食请咨询兽医。小铺商品均为虚拟物资，使用游戏积分兑换。</p></div>`;
   }
 }
 function navigate(next) {
@@ -730,7 +736,7 @@ function openVigil(){
   vigilDur=st.seconds*1000; vigilRunning=false; vigilEnd=0; vigilBroken=false;
   if(vigilId){clearInterval(vigilId);vigilId=null;}
   $('vigil-icon').innerHTML=icon('moon');
-  $('vigil-desc').textContent=`${G.petName(state)}病危了，还差一点积分买回春灵药。守夜期间请一直留在这一页陪着它：离开页面、切到别的标签或关掉这扇窗，这一夜就白守了，只能从头再来。`;
+  $('vigil-desc').textContent=`${G.petName(state)}病了，药还差一点，这一夜它只能依靠你。守着它的时候，请替它亮着这一页——你若走开，这一夜就散了，天亮得从头等起。`;
   $('vigil-timer').textContent=fmtClock(vigilDur);
   $('vigil-progress').style.width='0%';
   $('vigil-toggle').textContent='开始守夜';
@@ -743,10 +749,10 @@ function breakVigil(){
   if(vigilId){clearInterval(vigilId);vigilId=null;}
   $('vigil-progress').style.width='0%';
   $('vigil-timer').textContent=fmtClock(vigilDur);
-  $('vigil-desc').textContent=`守夜被打断，刚攒的心意散了。它还在等你，从头再来吧——这次别走开。`;
+  $('vigil-desc').textContent=`你走开的那一刻，这一夜就散了。它还在，夜还长，重新点亮这盏灯吧。`;
   $('vigil-toggle').textContent='重新开始守夜';
   $('vigil-toggle').disabled=false;
-  toast(`守夜中断，进度清零。${G.petName(state)}还在等你。`);
+  toast(`这一夜没能守到头，${G.petName(state)}还在等你。`);
 }
 function vigilTick(){
   if(!vigilRunning)return;
@@ -761,7 +767,7 @@ function vigilTick(){
     try{
       const err=G.claimVigil(state,now());
       if(err){toast(err);}
-      else{save(); if($('vigil-dialog').open)$('vigil-dialog').close(); render(); toast('守到了天亮，积分凑齐了，快去用回春灵药挽回它。');}
+      else{save(); if($('vigil-dialog').open)$('vigil-dialog').close(); render(); toast('天亮了，积分凑齐了。快用回春灵药，把它接回来。');}
     }catch{toast('守夜暂时无法记录。');}
   }
 }
@@ -771,7 +777,7 @@ function startVigil(){
   if(!st.available){toast(st.reason||'现在不需要守夜');return;}
   vigilDur=st.seconds*1000; vigilBroken=false;
   vigilRunning=true; vigilEnd=Date.now()+vigilDur;
-  $('vigil-desc').textContent=`夜深了，它靠在你的手边睡睡醒醒。别走开，这一页要一直亮着。`;
+  $('vigil-desc').textContent=`夜深了，它靠在你的手边睡睡醒醒。这一页亮着，就像你替它守着一盏灯——别走开。`;
   $('vigil-toggle').textContent='守夜中……'; $('vigil-toggle').disabled=true;
   if(vigilId)clearInterval(vigilId);
   vigilId=setInterval(vigilTick,250);
@@ -841,6 +847,10 @@ function applyNight() {
 function applyPace() {
   try{G.configurePace(carePace);}catch{toast('养育节奏无效，已保持原设置。');return;}
   try{localStorage.setItem('slow-growing-pace',carePace);}catch{}
+}
+function applyVigil() {
+  try{G.configureVigil(vigilSeconds);}catch{toast('守夜时长无效，已保持原设置。');return;}
+  try{localStorage.setItem('slow-growing-vigil',String(vigilSeconds));}catch{}
 }
 document.addEventListener('click',e=>{
   const card=e.target.closest('[data-ktoggle]');
@@ -987,6 +997,13 @@ document.addEventListener('change',async e=>{
     carePace=e.target.value;
     applyPace();
     render();
+  }
+  if(e.target.id==='vigil-duration') {
+    vigilSeconds=+e.target.value;
+    applyVigil();
+    if(vigilRunning){vigilDur=vigilSeconds*1000;vigilEnd=Date.now()+vigilDur;}
+    render();
+    toast(`守夜时长设为 ${Math.round(vigilSeconds/60)} 分钟。但愿用不上。`);
   }
   if(e.target.id==='import-save') {
     const file=e.target.files[0];if(!file)return;
