@@ -68,6 +68,24 @@ const assert = require('node:assert/strict');
     await page.locator('[data-adopt="baby"]').click();
     assert.match(await page.locator('#adopt-summary').innerText(), /短时小事件/);
     await page.locator('#adopt-confirm').click();
+    // 第一领养触发新手引导：五步走完，末步按钮变「开始陪伴」，标记写入
+    await page.locator('#guide-dialog').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#guide-title').innerText(), /它到家了/);
+    for (let i = 0; i < 4; i++) {
+      await page.locator('#guide-next').click();
+      await page.waitForTimeout(100);
+    }
+    assert.match(await page.locator('#guide-next').innerText(), /开始陪伴/);
+    await page.locator('#guide-next').click();
+    await page.locator('#guide-dialog').waitFor({ state: 'hidden' });
+    assert.equal(await page.evaluate(() => localStorage.getItem('slow-growing-guide-seen')), '1');
+    // 跳过路径：重看引导再跳过
+    await page.locator('aside [data-page="settings"]').click();
+    await page.locator('#replay-guide').click();
+    await page.locator('#guide-dialog').waitFor({ state: 'visible' });
+    await page.locator('#guide-skip').click();
+    await page.locator('#guide-dialog').waitFor({ state: 'hidden' });
+    await page.locator('nav [data-page="home"]').click();
     assert.match(await page.locator('#companion-chip').innerText(), /阿团/);
     assert.match(await page.locator('#greeting-title').innerText(), /新的一天，先看看它|午后的小屋，也要好好陪伴|阳光正好，慢慢待一会儿|傍晚回来了，它在等你|夜深了，轻轻陪一会儿/);
     assert.match(await page.locator('#room-weather').innerText(), /°C/);
@@ -461,6 +479,7 @@ const assert = require('node:assert/strict');
     assert.deepEqual(errors, []);
     const mobile = await browser.newPage({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
     await mobile.goto('http://localhost:8000', { waitUntil: 'domcontentloaded' });
+      await mobile.evaluate(() => localStorage.setItem('slow-growing-guide-seen', '1'));
     await mobile.locator('[data-adopt="cat"]').click();
     assert.equal(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await mobile.locator('#adopt-confirm').click();
@@ -480,6 +499,7 @@ const assert = require('node:assert/strict');
     await mobile.close();
     const plantPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     await plantPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded' });
+      await plantPage.evaluate(() => localStorage.setItem('slow-growing-guide-seen', '1'));
     await plantPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
     await plantPage.locator('[data-adopt="plant"]').click();
     await plantPage.locator('#adopt-confirm').click();
@@ -517,6 +537,7 @@ const assert = require('node:assert/strict');
     const nightPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     try {
       await nightPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await nightPage.evaluate(() => localStorage.setItem('slow-growing-guide-seen', '1'));
       await nightPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
       await nightPage.locator('[data-adopt="cat"]').click();
       await nightPage.locator('#adopt-confirm').click();
@@ -574,6 +595,7 @@ const assert = require('node:assert/strict');
     const namedPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     try {
       await namedPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await namedPage.evaluate(() => localStorage.setItem('slow-growing-guide-seen', '1'));
       await namedPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
       await namedPage.locator('[data-adopt="dog"]').click();
       assert.match(await namedPage.locator('#adopt-name').getAttribute('placeholder'), /麦芽/);
@@ -599,6 +621,7 @@ const assert = require('node:assert/strict');
     const knPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     try {
       await knPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await knPage.evaluate(() => localStorage.setItem('slow-growing-guide-seen', '1'));
       await knPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
       await knPage.locator('[data-adopt="cat"]').click();
       await knPage.locator('#adopt-confirm').click();
@@ -655,6 +678,7 @@ const assert = require('node:assert/strict');
     const packPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     try {
       await packPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await packPage.evaluate(() => localStorage.setItem('slow-growing-guide-seen', '1'));
       await packPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
       await packPage.locator('[data-adopt="cat"]').click();
       await packPage.locator('#adopt-confirm').click();
@@ -698,6 +722,7 @@ const assert = require('node:assert/strict');
     const ecoPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     try {
       await ecoPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await ecoPage.evaluate(() => localStorage.setItem('slow-growing-guide-seen', '1'));
       await ecoPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
       await ecoPage.locator('[data-adopt="cat"]').click();
       await ecoPage.locator('#adopt-confirm').click();
@@ -734,6 +759,7 @@ const assert = require('node:assert/strict');
     const opsPage = await browser.newPage({ viewport: { width: 1200, height: 900 } });
     try {
       await opsPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await opsPage.evaluate(() => localStorage.setItem('slow-growing-guide-seen', '1'));
       await opsPage.locator('#adopt-dialog').waitFor({ state: 'visible' });
       await opsPage.waitForTimeout(300);
       assert.equal(await opsPage.locator('#ad-top').isHidden(), true);
@@ -789,6 +815,7 @@ const assert = require('node:assert/strict');
     const noticeA = await browser.newPage({ viewport: { width: 1200, height: 900 } });
     try {
       await noticeA.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await noticeA.evaluate(() => localStorage.setItem('slow-growing-guide-seen', '1'));
       await noticeA.locator('#adopt-dialog').waitFor({ state: 'visible' });
       await noticeA.locator('#notice-dialog').waitFor({ state: 'visible', timeout: 6000 });
       assert.match(await noticeA.locator('#notice-content').innerText(), /全站公告/);
@@ -804,6 +831,7 @@ const assert = require('node:assert/strict');
       const noticeB = await browser.newPage({ viewport: { width: 1200, height: 900 } });
       try {
         await noticeB.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await noticeB.evaluate(() => localStorage.setItem('slow-growing-guide-seen', '1'));
         await noticeB.locator('#notice-dialog').waitFor({ state: 'visible', timeout: 6000 });
         assert.match(await noticeB.locator('#notice-content').innerText(), /全站公告/);
       } finally { await noticeB.close().catch(() => {}); }
