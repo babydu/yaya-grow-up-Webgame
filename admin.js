@@ -495,7 +495,8 @@
     if (t.closest('#ops-preview')) { syncDraft(); S.preview(JSON.parse(JSON.stringify(draft))); note('已在本机预览（未保存）。'); return; }
     if (t.closest('#ops-clearPreview')) { S.clearPreview(); note('已取消本机预览。'); return; }
     if (t.closest('#ops-clearDismissed')) { S.clearDismissed(); note('已恢复被访客关闭的广告显示。'); return; }
-    if (t.closest('#ops-forget-secret')) { forgetSecret(); note('已清除本机记住的密钥。下次发布或查看统计需要重新填写。'); return; }
+    const forget = t.closest('#ops-forget-secret');
+    if (forget) { forget.checked = true; forgetSecret(); note('已清除本机记住的密钥。下次发布或查看统计需要重新填写。'); return; }
     if (t.closest('#ops-reset')) { draft = JSON.parse(JSON.stringify(S.BASE)); S.preview(JSON.parse(JSON.stringify(draft))); renderEditor(); note('已清空为默认（仅预览，未发布）。'); return; }
     if (t.closest('#ops-export')) {
       syncDraft();

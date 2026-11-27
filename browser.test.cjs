@@ -840,9 +840,52 @@ const assert = require('node:assert/strict');
       fsMod.writeFileSync(cfgPath, seedCfg);
     }
 
-  } finally {
+    } finally {
       await nightPage.close().catch(() => {});
     }
+
+    // A corrupted rest-days save (regex-valid but calendar-invalid dates)
+    // must not kill bootstrap: the game retries with defaults.
+    const dirtyPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    try {
+      await dirtyPage.addInitScript(() => {
+        localStorage.setItem('slow-growing-restdays', JSON.stringify({ enabled: true, strength: 'pause', dates: ['2026-13-40'] }));
+      });
+      const dirtyErrors = [];
+      dirtyPage.on('pageerror', error => dirtyErrors.push(error.message));
+      await dirtyPage.goto('http://localhost:8000', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await dirtyPage.locator('#adopt-dialog').waitFor({ state: 'visible', timeout: 8000 });
+      assert.deepEqual(dirtyErrors, [], 'rest-days corruption must not surface as a page error');
+    } finally {
+      await dirtyPage.close().catch(() => {});
+    }
+
+    // Publishing from the admin panel must carry gameplay (vigil seconds)
+    // down to the server, not silently drop it.
+    const adminPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    try {
+      const posted = [];
+      await adminPage.route('**/api/site-config', async route => {
+        if (route.request().method() === 'POST') {
+          posted.push(route.request().postDataJSON());
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+        }
+        return route.continue();
+      });
+      await adminPage.goto('http://localhost:8000#ops=test-token', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await adminPage.waitForTimeout(600);
+      const hasToggle = await adminPage.locator('#ops-vigil').count();
+      if (hasToggle) {
+        await adminPage.fill('#ops-vigil', '90');
+        await adminPage.click('#ops-publish');
+        await adminPage.waitForTimeout(600);
+        assert.ok(posted.length >= 1, 'publish reached the server');
+        assert.equal(posted[posted.length - 1].gameplay.vigilSeconds, 90, 'gameplay published');
+      }
+    } finally {
+      await adminPage.close().catch(() => {});
+    }
+
   } finally {
     await Promise.race([browser.close(), new Promise(resolve => setTimeout(resolve, 3000))]);
   }

@@ -62,8 +62,8 @@ let restDays={enabled:false,strength:'slow',dates:[]};
 try{
   const rawRest=JSON.parse(localStorage.getItem('slow-growing-restdays')||'null');
   if(rawRest&&typeof rawRest.enabled==='boolean'&&(rawRest.strength==='slow'||rawRest.strength==='pause')&&Array.isArray(rawRest.dates)&&rawRest.dates.every(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)))restDays={enabled:rawRest.enabled,strength:rawRest.strength,dates:rawRest.dates};
-}catch{}
-G.configureRestDays(restDays);
+  G.configureRestDays(restDays);
+}catch{ restDays={enabled:false,strength:'slow',dates:[]}; }
 const PACE_IDS=['tight','normal','relaxed'];
 let carePace='normal';
 try{
@@ -803,7 +803,14 @@ function vigilTick(){
     vigilRunning=false; if(vigilId){clearInterval(vigilId);vigilId=null;}
     try{
       const err=G.claimVigil(state,now());
-      if(err){toast(err);}
+      if(err){
+        // Claim was refused (e.g. another tab used the daily vigil first):
+        // let the player retry or leave instead of a disabled dead end.
+        $('vigil-desc').textContent=err;
+        $('vigil-toggle').textContent='重新开始守夜';
+        $('vigil-toggle').disabled=false;
+        toast(err);
+      }
       else{save(); if($('vigil-dialog').open)$('vigil-dialog').close(); render(); toast('天亮了，积分凑齐了。快用回春灵药，把它接回来。');}
     }catch{toast('守夜暂时无法记录。');}
   }

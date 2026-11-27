@@ -81,7 +81,10 @@
   // every drain by the rest rate. Slowest rates simply stack.
   function tuneHours(from, to) {
     if (to <= from) return { awake: 0, energy: 0, any: 0 };
-    from = Math.max(from, to - 438000 * DAY);
+    // Clamp to 30 days: living saves can never span longer (the critical
+    // window forces departure within ~40h), while a corrupted `updated=0`
+    // save would otherwise loop half a million hour bins.
+    from = Math.max(from, to - 30 * DAY);
     const restOn = restDays.enabled;
     const r = restOn ? (restDays.strength === 'pause' ? 0 : REST_RATES.slow) : 1;
     let awake = 0, energy = 0, any = 0;
@@ -636,8 +639,9 @@
           if (asleep) return Math.min(100, v + dayH * SLEEP_GAIN_DAY + nightH * SLEEP_GAIN_NIGHT);
           return Math.max(0, v - energyHours * rate);
         }
-        // Hunger/comfort keep falling at full speed while asleep; a sleeping
-        // child still gets hungry, so mornings start with real needs.
+        // Hunger/comfort keep falling at full speed while asleep (unless a
+        // rest-day pause zeroes activeHours); a sleeping child still gets
+        // hungry, so mornings start with real needs.
         return Math.max(0, v - (asleep ? hours : activeHours) * rate);
       });
       if (asleep && s.needs[3] >= 100) {

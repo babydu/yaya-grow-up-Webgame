@@ -1077,6 +1077,19 @@ test('nightSpanMs stays bounded for extreme spans', () => {
   G.configureNight({ enabled: false, start: 22, end: 6 });
 });
 
+test('tuneHours clamps a corrupted near-zero updated without spinning', () => {
+  const broken = pet();
+  broken.updated = 0;
+  broken.born = 0;
+  broken.logs = [];
+  broken.daily = { date: '1970-01-01', seconds: 0, count: 0, earned: 0 };
+  const start = process.hrtime.bigint();
+  G.refresh(broken, NOW);
+  const ms = Number(process.hrtime.bigint() - start) / 1e6;
+  assert.ok(ms < 200, `corrupted save blocked for ${ms.toFixed(1)}ms`);
+  assert.ok(Number.isFinite(broken.needs[0]) && broken.needs[0] >= 0);
+});
+
 test('criticalRemaining shares the night-halved countdown with the engine', () => {
   G.configureNight({ enabled: true, start: 22, end: 6 });
   const dying = pet();

@@ -188,7 +188,7 @@
 
   // ---- publish (admin) ----
   function save(cfg, token) {
-    const payload = { site: cfg.site, ads: cfg.ads, announcement: cfg.announcement };
+    const payload = { site: cfg.site, ads: cfg.ads, announcement: cfg.announcement, prices: cfg.prices, gameplay: cfg.gameplay, analytics: cfg.analytics };
     return fetch('api/site-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-admin-token': token || '' },
@@ -196,6 +196,10 @@
     }).then(async r => {
       if (r.status === 401) return { ok: false, error: 'unauthorized' };
       if (!r.ok) return { ok: false, error: 'http-' + r.status };
+      // Static hosts often answer any POST with a 200 index.html, which would
+      // otherwise look like a successful publish. Require the server's ack.
+      try { const body = await r.json(); if (!body || body.ok !== true) return { ok: false, error: 'bad-response' }; }
+      catch (_) { return { ok: false, error: 'bad-response' }; }
       remote = merge(BASE, payload);
       previewCfg = null;
       // Re-read what the server actually stored (it sanitises/clamps input).
@@ -205,7 +209,7 @@
     }).catch(() => ({ ok: false, error: 'network' }));
   }
   function exportJson(cfg) {
-    const clean = { site: cfg.site, ads: cfg.ads, announcement: cfg.announcement, prices: cfg.prices || {}, updatedAt: Date.now() };
+    const clean = { site: cfg.site, ads: cfg.ads, announcement: cfg.announcement, prices: cfg.prices || {}, gameplay: cfg.gameplay || { vigilSeconds: 150 }, analytics: cfg.analytics || {}, updatedAt: Date.now() };
     return JSON.stringify(clean, null, 2);
   }
 
