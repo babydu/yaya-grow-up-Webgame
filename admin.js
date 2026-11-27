@@ -100,7 +100,8 @@
 
           <section class="ops-sec">
             <h3>发布</h3>
-            <label class="ops-field"><span>运维写入密钥（服务器 OPS_TOKEN；留空则用入口 token）</span><input type="password" id="ops-secret" autocomplete="off" placeholder="若服务器设置了 OPS_TOKEN，请在此填入"></label>
+            <label class="ops-field"><span>运维写入密钥（服务器 OPS_TOKEN；留空则用入口 token）</span><input type="password" id="ops-secret" autocomplete="off" placeholder="本机已记住则留空；填入新值会覆盖记忆"></label>
+            <label class="ops-check"><input type="checkbox" id="ops-forget-secret"> 清除本机记住的密钥</label>
             <div class="ops-actions">
               <button type="button" id="ops-publish" class="ops-primary">发布到服务器（全站生效）</button>
               <button type="button" id="ops-preview">本机预览</button>
@@ -111,7 +112,7 @@
               <button type="button" id="ops-clearDismissed">恢复被关闭的广告</button>
               <button type="button" id="ops-reset">清空为默认并预览</button>
             </div>
-            <p class="ops-hint" id="ops-note">「发布到服务器」会把配置写入服务器上的 data/site-config.json，所有访客生效。生产环境建议在服务器设置 OPS_TOKEN 并在此填入同一密钥（入口 token 仅用于隐藏面板）。纯静态部署（无 server.js）请用「导出」替换该文件后重新部署。</p>
+<p class="ops-hint" id="ops-note">「发布到服务器」会把配置写入服务器上的 data/site-config.json，所有访客生效。生产环境建议在服务器设置 OPS_TOKEN 并在此填入同一密钥（入口 token 仅用于隐藏面板）。密钥验证成功后会记住在本机浏览器里，之后发布、查看统计都无需再填；换电脑或清浏览器数据需要重新填一次，下方可随时清除记忆。纯静态部署（无 server.js）请用「导出」替换该文件后重新部署。</p>
             <details class="ops-details"><summary>高级：编辑原始 JSON</summary>
               <textarea id="ops-json" class="ops-json" spellcheck="false"></textarea>
               <button type="button" id="ops-applyjson" class="ops-chip">从 JSON 载入到编辑器</button>
@@ -195,7 +196,7 @@
     $ops('#ops-vigil').value = (draft.gameplay && draft.gameplay.vigilSeconds) || '';
     $ops('#ops-ads').innerHTML = draft.ads.items.length ? draft.ads.items.map(adRow).join('') : '<p class="ops-empty">还没有广告。用上面的快捷按钮添加。</p>';
     $ops('#ops-json').value = JSON.stringify({ site: draft.site, ads: draft.ads, announcement: draft.announcement, gameplay: draft.gameplay }, null, 2);
-    try { $ops('#ops-secret').value = sessionStorage.getItem('ops-write-token') || ''; } catch (_) { /* ignore */ }
+    try { $ops('#ops-secret').value = rememberedSecret(); } catch (_) { /* ignore */ }
     const an = draft.analytics || {};
     $ops('#ops-an-firstParty').checked = an.firstParty !== false;
     $ops('#ops-an-provider').value = an.provider === 'ga4' ? 'ga4' : '';
@@ -267,10 +268,25 @@
   // The panel entry token (config.js adminToken) is served to every visitor,
   // so it can never be a real secret. The write key (server OPS_TOKEN) is what
   // actually protects publishing/stats. Walk the operator through setting it.
+  // A secret that passes a server check is remembered on this machine
+  // (localStorage) so the operator does not retype the long string for every
+  // publish/stats action. 401 answers drop the remembered value.
+  function rememberedSecret() {
+    try { return localStorage.getItem('ops-write-token') || sessionStorage.getItem('ops-write-token') || ''; } catch (_) { return ''; }
+  }
+  function rememberSecret(v) {
+    const s = String(v || '').trim();
+    if (!s) return;
+    try { localStorage.setItem('ops-write-token', s); sessionStorage.setItem('ops-write-token', s); } catch (_) { /* ignore */ }
+  }
+  function forgetSecret() {
+    try { localStorage.removeItem('ops-write-token'); sessionStorage.removeItem('ops-write-token'); } catch (_) { /* ignore */ }
+    const el = $ops('#ops-secret');
+    if (el) el.value = '';
+  }
   function writeSecret() {
     const el = $ops('#ops-secret');
-    const stored = (function () { try { return sessionStorage.getItem('ops-write-token') || ''; } catch (_) { return ''; } })();
-    return (el && el.value.trim()) || stored || token;
+    return (el && el.value.trim()) || rememberedSecret() || token;
   }
   async function loadOpsStatus() {
     const box = $ops('#ops-security');
@@ -278,10 +294,12 @@
     try {
       const r = await fetch('api/ops-status', { headers: { 'x-admin-token': writeSecret() } });
       if (r.status === 401) {
-        box.innerHTML = '<div class="ops-warn"><b>写入密钥不正确。</b>请核对「运维写入密钥」或服务器 OPS_TOKEN 后重试。</div>';
+        forgetSecret();
+        box.innerHTML = '<div class="ops-warn"><b>写入密钥不正确。</b>请核对「运维写入密钥」或服务器 OPS_TOKEN 后重试，已记住的密钥已被清除。</div>';
         return;
       }
       if (!r.ok) { box.innerHTML = '<p class="ops-empty">无法读取服务器安全状态（需 server.js）。</p>'; return; }
+      rememberSecret(writeSecret());
       const d = await r.json();
       if (d.writeProtected) {
         box.innerHTML = '<div class="ops-ok"><b>已受 OPS_TOKEN 保护。</b>发布与统计由服务器环境变量中的独立密钥校验，入口 token 泄露也无法写入门面。</div>';
@@ -330,15 +348,17 @@
 
   async function publish() {
     syncDraft();
-    const payload = { site: draft.site, ads: draft.ads, announcement: draft.announcement, prices: draft.prices || {}, analytics: draft.analytics };
+    const payload = { site: draft.site, ads: draft.ads, announcement: draft.announcement, prices: draft.prices || {}, gameplay: draft.gameplay, analytics: draft.analytics };
     const secretEl = $ops('#ops-secret');
-    const secret = (secretEl && secretEl.value.trim()) || token;
-    try { sessionStorage.setItem('ops-write-token', (secretEl && secretEl.value.trim()) || ''); } catch (_) { /* ignore */ }
+    const secret = writeSecret();
     if (!secret) { note('请用带 #ops=密钥 的地址打开后台，或填写运维写入密钥。'); return; }
     note('正在发布到服务器…');
     const res = await S.save(payload, secret);
-    if (res.ok) { draft = JSON.parse(JSON.stringify(S.getConfig())); renderEditor(); note('已发布，全站访客生效。'); }
-    else if (res.error === 'unauthorized') { note('密钥不正确，服务器拒绝了写入。'); }
+    if (res.ok) {
+      rememberSecret(secret);
+      draft = JSON.parse(JSON.stringify(S.getConfig())); renderEditor(); note('已发布，全站访客生效。密钥已在本机记住，下次无需再填。');
+    }
+    else if (res.error === 'unauthorized') { forgetSecret(); note('密钥不正确，服务器拒绝了写入，已记住的密钥已被清除。'); }
     else { note('无法写入服务器（可能是纯静态部署）。请改用「导出 data/site-config.json」并替换部署。'); }
   }
 
@@ -350,8 +370,9 @@
     box.innerHTML = '<p class="ops-empty">加载中…</p>';
     try {
       const r = await fetch('api/stats', { headers: { 'x-admin-token': t } });
-      if (r.status === 401) { box.innerHTML = '<p class="ops-empty">密钥不正确或未部署后端。</p>'; return; }
+      if (r.status === 401) { forgetSecret(); box.innerHTML = '<p class="ops-empty">密钥不正确或未部署后端，已记住的密钥已被清除。</p>'; return; }
       if (!r.ok) { box.innerHTML = '<p class="ops-empty">统计接口不可用（需 server.js）。</p>'; return; }
+      rememberSecret(t);
       const d = await r.json();
       renderStats(d);
     } catch (_) {
@@ -372,8 +393,9 @@
     if (!t) { box.innerHTML = '<p class="ops-empty">请用带 #ops=密钥 的地址打开后台。</p>'; return; }
     try {
       const r = await fetch('api/presence', { headers: { 'x-admin-token': t } });
-      if (r.status === 401) { box.innerHTML = '<p class="ops-empty">密钥不正确或未部署后端。</p>'; return; }
+      if (r.status === 401) { forgetSecret(); box.innerHTML = '<p class="ops-empty">密钥不正确或未部署后端，已记住的密钥已被清除。</p>'; return; }
       if (!r.ok) { box.innerHTML = '<p class="ops-empty">在线统计接口不可用（需 server.js）。</p>'; return; }
+      rememberSecret(t);
       const d = await r.json();
       box.innerHTML =
         `<div class="ops-cards ops-presence-cards">` +
@@ -473,6 +495,7 @@
     if (t.closest('#ops-preview')) { syncDraft(); S.preview(JSON.parse(JSON.stringify(draft))); note('已在本机预览（未保存）。'); return; }
     if (t.closest('#ops-clearPreview')) { S.clearPreview(); note('已取消本机预览。'); return; }
     if (t.closest('#ops-clearDismissed')) { S.clearDismissed(); note('已恢复被访客关闭的广告显示。'); return; }
+    if (t.closest('#ops-forget-secret')) { forgetSecret(); note('已清除本机记住的密钥。下次发布或查看统计需要重新填写。'); return; }
     if (t.closest('#ops-reset')) { draft = JSON.parse(JSON.stringify(S.BASE)); S.preview(JSON.parse(JSON.stringify(draft))); renderEditor(); note('已清空为默认（仅预览，未发布）。'); return; }
     if (t.closest('#ops-export')) {
       syncDraft();
