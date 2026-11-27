@@ -358,3 +358,15 @@
 .sleep-wake{flex:0 0 auto;min-height:44px;padding:10px 16px;border:1px solid #b9c6d8;background:#fff;border-radius:10px;color:#4a5a70;font-size:13px;cursor:pointer}
 .sleep-wake:hover{background:#f2f6fb}
 @media(max-width:700px){.sleep-banner{flex-wrap:wrap}.sleep-wake{width:100%}}
+.rest-banner{display:flex;align-items:center;gap:12px;margin:12px 0;border:1px solid #d9c9a8;background:#faf3e2;border-radius:12px;padding:12px 14px;color:#6a5a3a;line-height:1.7}
+.rest-banner[hidden]{display:none}
+.rest-banner .sleep-icon{background:#efe2c4}
+.rest-banner strong{color:#57471f}
+.rest-banner p{color:#7a6a42}
+.rest-days{display:flex;flex-direction:column;gap:8px;width:100%}
+.rest-chips{display:flex;flex-wrap:wrap;gap:6px}
+.rest-chip{display:inline-flex;align-items:center;gap:4px;background:#eef3f9;border:1px solid #c9d3e0;border-radius:999px;padding:4px 6px 4px 12px;font-size:12px;color:#4a5a70}
+.rest-chip .rest-del{border:0;background:#dce6f2;border-radius:50%;width:20px;height:20px;line-height:1;color:#4a5a70;cursor:pointer;padding:0}
+.rest-empty{font-size:12px;color:#8b98ab}
+.rest-add{display:flex;gap:8px;align-items:center}
+.rest-add input[type=date]{border:1px solid #c9d3e0;border-radius:8px;padding:6px 8px;font:inherit;color:#33415c;background:#fff}

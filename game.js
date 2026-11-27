@@ -58,6 +58,12 @@ try{
   if(rawNight&&typeof rawNight.enabled==='boolean'&&Number.isInteger(rawNight.start)&&Number.isInteger(rawNight.end)&&rawNight.start>=0&&rawNight.start<=23&&rawNight.end>=0&&rawNight.end<=23)night=rawNight;
 }catch{}
 G.configureNight(night);
+let restDays={enabled:false,strength:'slow',dates:[]};
+try{
+  const rawRest=JSON.parse(localStorage.getItem('slow-growing-restdays')||'null');
+  if(rawRest&&typeof rawRest.enabled==='boolean'&&(rawRest.strength==='slow'||rawRest.strength==='pause')&&Array.isArray(rawRest.dates)&&rawRest.dates.every(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)))restDays={enabled:rawRest.enabled,strength:rawRest.strength,dates:rawRest.dates};
+}catch{}
+G.configureRestDays(restDays);
 const PACE_IDS=['tight','normal','relaxed'];
 let carePace='normal';
 try{
@@ -290,6 +296,15 @@ function render() {
   $('bond-card').innerHTML = `<span class="bond-icon">${icon('heart')}</span><div><strong>${['开始熟悉你','已经很依赖你','你是最安心的存在'][state.bond>=65?2:state.bond>=30?1:0]}</strong><p>${emotion()}</p></div><div class="bond-score"><b>${Math.round(state.bond)}</b> / 100<small>亲密度</small></div>`;
   renderToolbox();
   const asleep = !gone && G.isAsleep(state);
+  const resting = !gone && restDays.enabled && G.isRestDayMs(now());
+  const restBanner = $('rest-banner');
+  if (restBanner) {
+    restBanner.hidden = !resting;
+    if (resting) {
+      const marked = ![0, 6].includes(new Date(now()).getDay());
+      restBanner.innerHTML = `<span class="sleep-icon">${icon('sun')}</span><div><strong>今天是休息日${marked ? '（你标记的日子）' : ''}</strong><p>${restDays.strength === 'pause' ? '需求完全停摆，安心去过你的周末，它不会饿着的。' : '需求只有平时的一成，慢一点也没关系。'}</p></div>`;
+    }
+  }
   const sleepBanner = $('sleep-banner');
   if (sleepBanner) {
     sleepBanner.hidden = !asleep;
@@ -462,7 +477,7 @@ function renderSecondary() {
     el.innerHTML=`<div class="page-panel"><div class="eyebrow">LEARN WHILE YOU CARE</div><div class="section-heading"><h2>养育课堂</h2><span class="points-pill">${icon('bulb')} 已了解 ${readCount} / ${list.length} 篇</span></div><p>游戏里的每一次照料，都有真实世界的对应。这里收集了${escapeHtml(petName())}（${profile().kind}）相关的通用养护知识，点击卡片展开阅读。</p>${groups}<p class="knowledge-disclaimer">以上内容为游戏化科普摘要，具体的养育决策请咨询儿科医生、兽医或园艺专业人士。</p></div>`;
   } else {
     const bgCount=['food','clean','mood','energy'].filter(id=>backgroundCare[id]).length;
-    el.innerHTML=`<div class="page-panel"><div class="eyebrow">MAKE YOURSELF AT HOME</div><h2>偏好与存档</h2><label class="setting-row"><span>应用内照护提醒<small>页面打开时提醒低需求；系统后台推送尚未接入。</small></span><input type="checkbox" id="reminders" ${reminderEnabled?'checked':''}></label><label class="setting-row"><span>背景音乐<small>照护进行时播放实时合成的音景，全部由浏览器本地生成，无外部音频文件。若手机处于静音模式（iOS 侧边拨片），请先取消静音。</small></span><input type="checkbox" id="bgm-enabled" ${A.pref.enabled?'checked':''}></label><label class="setting-row"><span>音景风格<small>白噪音、雨声、海浪、八音盒轻音乐、森林晨间，照护中切换即刻生效。</small></span><select id="bgm-style">${A.stylesHtml(A.pref.style)}</select></label><label class="setting-row"><span>音乐音量<small>当前 ${Math.round(A.pref.volume*100)}%，只影响背景音景。</small></span><input type="range" id="bgm-volume" min="0" max="100" value="${Math.round(A.pref.volume*100)}" style="--fill:${Math.round(A.pref.volume*100)}%"></label><label class="setting-row"><span>贴心管家<small>到点或需求过低时自动照料，按小时扣除积分（约 10 分/小时），且托管照护不产生照护积分；库存不足时按双倍积分自动补货，病危时仍需你亲手用药。</small></span><input type="checkbox" id="nanny-enabled" ${nannyOn?'checked':''}></label><div class="setting-row"><span>后台照护<small>勾选后，对应照护在切到其他标签页、应用或锁屏时按真实时间继续；关闭照护弹窗或整个页面仍会暂停并保留进度。</small></span><div class="bg-grid">${(state.selected==='plant'?[['food','浇水'],['clean','擦叶'],['mood','晒太阳'],['energy','施肥']]:[['food','喂养'],['clean','清洁'],['mood','陪伴'],['energy','休息']]).map(([id,name])=>`<label class="bg-check"><input type="checkbox" data-bg="${id}" ${backgroundCare[id]?'checked':''}>${name}</label>`).join('')}</div></div><label class="setting-row"><span>养育节奏<small>调整两次照护之间的关注间隔，需求下降速度一并缩放。单次照护时长不变。默认正常。</small></span><select id="care-pace">${[['tight','紧致 · 稍密'],['normal','正常'],['relaxed','宽松 · 稍疏']].map(([id,name])=>`<option value="${id}" ${id===carePace?'selected':''}>${name}</option>`).join('')}</select></label><div class="setting-row"><span>夜间节奏<small>就寝时段内需求与健康度的下降速度减半，照护与成长计时照常。默认 22 点到次日 6 点。</small></span><div class="night-window"><input type="checkbox" id="night-enabled" ${night.enabled?'checked':''}><select id="night-start" ${night.enabled?'':'disabled'}>${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===night.start?'selected':''}>${h} 点</option>`).join('')}</select><b>至</b><select id="night-end" ${night.enabled?'':'disabled'}>${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===night.end?'selected':''}>${h} 点</option>`).join('')}</select></div></div><div class="setting-row"><span>专心陪伴模式<small>前台照护保持页面可见计时；已允许后台的操作在切后台后继续累计。</small></span><span class="stage-badge">${bgCount?`后台 ${bgCount} 项`:'仅前台'}</span></div><div class="setting-row"><span>成长时间<small>现实 1 天 = 游戏 30 天，升级同时需要有效照护经验。</small></span></div><div class="setting-row"><span>导出存档<small>进度保存在此浏览器，可导出文件备份。</small></span><button class="primary" id="export-save">导出</button></div><label class="setting-row"><span>恢复存档<small>恢复前自动下载当前进度备份；支持本版本的 JSON 存档。</small></span><input id="import-save" type="file" accept=".json,application/json"></label><p>养育节奏、饮食与情绪数值采用游戏化简化。真实宝宝的喂养方式、辅食时机与营养补充，请与儿科专业人员讨论；宠物饮食请咨询兽医。小铺商品均为虚拟物资，使用游戏积分兑换。</p></div>`;
+    el.innerHTML=`<div class="page-panel"><div class="eyebrow">MAKE YOURSELF AT HOME</div><h2>偏好与存档</h2><label class="setting-row"><span>应用内照护提醒<small>页面打开时提醒低需求；系统后台推送尚未接入。</small></span><input type="checkbox" id="reminders" ${reminderEnabled?'checked':''}></label><label class="setting-row"><span>背景音乐<small>照护进行时播放实时合成的音景，全部由浏览器本地生成，无外部音频文件。若手机处于静音模式（iOS 侧边拨片），请先取消静音。</small></span><input type="checkbox" id="bgm-enabled" ${A.pref.enabled?'checked':''}></label><label class="setting-row"><span>音景风格<small>白噪音、雨声、海浪、八音盒轻音乐、森林晨间，照护中切换即刻生效。</small></span><select id="bgm-style">${A.stylesHtml(A.pref.style)}</select></label><label class="setting-row"><span>音乐音量<small>当前 ${Math.round(A.pref.volume*100)}%，只影响背景音景。</small></span><input type="range" id="bgm-volume" min="0" max="100" value="${Math.round(A.pref.volume*100)}" style="--fill:${Math.round(A.pref.volume*100)}%"></label><label class="setting-row"><span>贴心管家<small>到点或需求过低时自动照料，按小时扣除积分（约 10 分/小时），且托管照护不产生照护积分；库存不足时按双倍积分自动补货，病危时仍需你亲手用药。</small></span><input type="checkbox" id="nanny-enabled" ${nannyOn?'checked':''}></label><div class="setting-row"><span>后台照护<small>勾选后，对应照护在切到其他标签页、应用或锁屏时按真实时间继续；关闭照护弹窗或整个页面仍会暂停并保留进度。</small></span><div class="bg-grid">${(state.selected==='plant'?[['food','浇水'],['clean','擦叶'],['mood','晒太阳'],['energy','施肥']]:[['food','喂养'],['clean','清洁'],['mood','陪伴'],['energy','休息']]).map(([id,name])=>`<label class="bg-check"><input type="checkbox" data-bg="${id}" ${backgroundCare[id]?'checked':''}>${name}</label>`).join('')}</div></div><label class="setting-row"><span>养育节奏<small>调整两次照护之间的关注间隔，需求下降速度一并缩放。单次照护时长不变。默认正常。</small></span><select id="care-pace">${[['tight','紧致 · 稍密'],['normal','正常'],['relaxed','宽松 · 稍疏']].map(([id,name])=>`<option value="${id}" ${id===carePace?'selected':''}>${name}</option>`).join('')}</select></label><div class="setting-row"><span>夜间节奏<small>就寝时段内需求与健康度的下降速度减半，照护与成长计时照常。默认 22 点到次日 6 点。</small></span><div class="night-window"><input type="checkbox" id="night-enabled" ${night.enabled?'checked':''}><select id="night-start" ${night.enabled?'':'disabled'}>${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===night.start?'selected':''}>${h} 点</option>`).join('')}</select><b>至</b><select id="night-end" ${night.enabled?'':'disabled'}>${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===night.end?'selected':''}>${h} 点</option>`).join('')}</select></div></div><label class="setting-row"><span>休息日模式<small>周末（周六、周日）和你标出的日子里，需求下降极慢甚至完全停摆，可以把周末还给自己。法定节假日与调休请按需自己加进日历。</small></span><input type="checkbox" id="rest-enabled" ${restDays.enabled?'checked':''}></label><div class="setting-row"><span>休息日强度<small>极慢约为一成速度；几乎不饿则需求完全停摆，健康度回升照常。</small></span><select id="rest-strength" ${restDays.enabled?'':'disabled'}><option value="slow" ${restDays.strength==='slow'?'selected':''}>极慢 · 约一成速度</option><option value="pause" ${restDays.strength==='pause'?'selected':''}>几乎不饿 · 完全停摆</option></select></div><div class="setting-row"><span>自定义休息日<small>添加法定节假日、调休或任何你想放假的日子，只对本机存档生效。</small></span><div class="rest-days"><div class="rest-chips" id="rest-chips">${restDays.dates.length?restDays.dates.map((d,i)=>`<span class="rest-chip">${d}<button type="button" class="rest-del" data-rest-del="${i}" aria-label="删除${d}">×</button></span>`).join(''):'<span class="rest-empty">还没有自定义休息日</span>'}</div><div class="rest-add"><input type="date" id="rest-date-input"><button type="button" class="quiet-label" id="rest-date-add">添加</button></div></div></div><div class="setting-row"><span>专心陪伴模式<small>前台照护保持页面可见计时；已允许后台的操作在切后台后继续累计。</small></span><span class="stage-badge">${bgCount?`后台 ${bgCount} 项`:'仅前台'}</span></div><div class="setting-row"><span>成长时间<small>现实 1 天 = 游戏 30 天，升级同时需要有效照护经验。</small></span></div><div class="setting-row"><span>导出存档<small>进度保存在此浏览器，可导出文件备份。</small></span><button class="primary" id="export-save">导出</button></div><label class="setting-row"><span>恢复存档<small>恢复前自动下载当前进度备份；支持本版本的 JSON 存档。</small></span><input id="import-save" type="file" accept=".json,application/json"></label><p>养育节奏、饮食与情绪数值采用游戏化简化。真实宝宝的喂养方式、辅食时机与营养补充，请与儿科专业人员讨论；宠物饮食请咨询兽医。小铺商品均为虚拟物资，使用游戏积分兑换。</p></div>`;
   }
 }
 function navigate(next) {
@@ -842,6 +857,10 @@ function applyPace() {
   try{G.configurePace(carePace);}catch{toast('养育节奏无效，已保持原设置。');return;}
   try{localStorage.setItem('slow-growing-pace',carePace);}catch{}
 }
+function applyRestDays() {
+  try{G.configureRestDays(restDays);}catch{toast('休息日设置无效，已保持原设置。');return;}
+  try{localStorage.setItem('slow-growing-restdays',JSON.stringify(restDays));}catch{}
+}
 document.addEventListener('click',e=>{
   const card=e.target.closest('[data-ktoggle]');
   if(card){
@@ -856,6 +875,21 @@ document.addEventListener('click',e=>{
   if(b.id==='stage-up-close'){$('stage-up').hidden=true;return;}
   if(b.id==='vigil-button'){openVigil();return;}
   if(b.id==='vigil-toggle'){startVigil();return;}
+  if(b.id==='rest-date-add'){
+    const v=$('rest-date-input').value;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){toast('请先选一个日期再添加。');return;}
+    if(restDays.dates.includes(v)){toast('这一天已经是休息日了。');return;}
+    restDays.dates=[...restDays.dates,v].sort();
+    applyRestDays(); render(); toast(`${v} 已加入休息日。`);
+    return;
+  }
+  if(b.dataset.restDel!==undefined){
+    const i=+b.dataset.restDel;
+    const gone=restDays.dates[i];
+    restDays.dates=restDays.dates.filter((_,j)=>j!==i);
+    applyRestDays(); render(); toast(`${gone} 已移出休息日。`);
+    return;
+  }
   if(b.dataset.adopt){selectedType=b.dataset.adopt;renderAdoption();return;}
   if(b.id==='adopt-confirm') {
     if(loadFailed&&!confirm('原存档读取失败。开始新故事将写入新的存档，是否继续？'))return;
@@ -986,6 +1020,18 @@ document.addEventListener('change',async e=>{
   if(e.target.id==='care-pace') {
     carePace=e.target.value;
     applyPace();
+    render();
+  }
+  if(e.target.id==='rest-enabled') {
+    restDays.enabled=e.target.checked;
+    $('rest-strength').disabled=!restDays.enabled;
+    applyRestDays();
+    render();
+    if(restDays.enabled&&G.isRestDayMs(Date.now()))toast('今天就是休息日，它也懒洋洋的。');
+  }
+  if(e.target.id==='rest-strength') {
+    restDays.strength=e.target.value;
+    applyRestDays();
     render();
   }
   if(e.target.id==='import-save') {

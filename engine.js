@@ -43,6 +43,60 @@
     assert(own(PACE, id), '养育节奏无效');
     pace = id;
   }
+  // Rest-day mode: on weekends and player-marked days the pet's needs drain at
+  // a crawl (slow) or not at all (pause), so the player can keep their own
+  // weekends. Health recovery and the critical window keep using real time.
+  const REST_RATES = { slow: 0.1, pause: 0 };
+  let restDays = { enabled: false, strength: 'slow', dates: [] };
+  function validIso(d) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+    const dt = new Date(d + 'T12:00:00');
+    return !isNaN(dt.getTime()) && dt.getMonth() === +d.slice(5, 7) - 1 && dt.getDate() === +d.slice(8, 10);
+  }
+  function isoDay(t) {
+    const d = new Date(t);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  function isRestDayMs(t) {
+    const dow = new Date(t).getDay();
+    if (dow === 0 || dow === 6) return true;
+    return restDays.dates.includes(isoDay(t));
+  }
+  function configureRestDays(config) {
+    assert(record(config) && typeof config.enabled === 'boolean');
+    assert(config.strength === 'slow' || config.strength === 'pause', '休息日强度无效');
+    assert(Array.isArray(config.dates) && config.dates.every(validIso), '休息日日期无效');
+    restDays = { enabled: config.enabled, strength: config.strength, dates: [...new Set(config.dates)] };
+  }
+  function isNightHour(t) {
+    if (!night.enabled || night.start === night.end) return false;
+    const h = new Date(t).getHours();
+    const a = night.start;
+    const b = night.end <= night.start ? night.end + 24 : night.end;
+    const h2 = h < a ? h + 24 : h;
+    return h2 >= a && h2 < b;
+  }
+  // Split an interval into hour bins and apply every active slowdown at once:
+  // night windows halve need drain (energy drains faster), rest days multiply
+  // every drain by the rest rate. Slowest rates simply stack.
+  function tuneHours(from, to) {
+    if (to <= from) return { awake: 0, energy: 0, any: 0 };
+    from = Math.max(from, to - 438000 * DAY);
+    const restOn = restDays.enabled;
+    const r = restOn ? (restDays.strength === 'pause' ? 0 : REST_RATES.slow) : 1;
+    let awake = 0, energy = 0, any = 0;
+    for (let t = Math.floor(from / HOUR) * HOUR; t < to; t += HOUR) {
+      const segEnd = Math.min(t + HOUR, to);
+      const frac = (segEnd - Math.max(t, from)) / HOUR;
+      const nightHere = isNightHour(t + (segEnd - t) / 2);
+      const restHere = restOn && isRestDayMs(t + (segEnd - t) / 2);
+      const restMul = restHere ? r : 1;
+      awake += frac * (nightHere ? NIGHT_RATE : 1) * restMul;
+      energy += frac * (nightHere ? NIGHT_DROWSY : 1) * restMul;
+      any += frac * restMul;
+    }
+    return { awake, energy, any };
+  }
   function paceHours(hours) {
     return hours * PACE[pace];
   }
@@ -563,8 +617,12 @@
     // Night hours advance growth pressure at half speed; recovery follows real time.
     const dayH = (span - restMs) / HOUR;
     const nightH = restMs / HOUR;
-    const activeHours = dayH + nightH * NIGHT_RATE;
-    const hours = span / HOUR;
+    // Rest days slow the drain further (hour bins, slowest rate wins).
+    const tuned = tuneHours(s.updated, now);
+    const activeHours = tuned.awake;
+    const energyHours = tuned.energy;
+    const hours = tuned.any;
+    const rawHours = span / HOUR;
     s.updated = now;
     const asleep = isAsleep(s);
     // Apply the destination stage's rates to the entire elapsed interval.
@@ -576,7 +634,7 @@
           // Energy: drains while awake (faster at night), recovers while asleep
           // (deeper recovery during the night window).
           if (asleep) return Math.min(100, v + dayH * SLEEP_GAIN_DAY + nightH * SLEEP_GAIN_NIGHT);
-          return Math.max(0, v - (dayH + nightH * NIGHT_DROWSY) * rate);
+          return Math.max(0, v - energyHours * rate);
         }
         // Hunger/comfort keep falling at full speed while asleep; a sleeping
         // child still gets hungry, so mornings start with real needs.
@@ -593,7 +651,7 @@
       // Sleep shields health: needs still deplete but the body copes better.
       const healthHours = asleep ? hours * SLEEP_HEALTH_SHIELD : activeHours;
       if (starving > 0) s.health = Math.max(0, s.health - Math.min(3, starving * 0.75) * healthHours);
-      else if (s.needs.every(v => v >= 30)) s.health = Math.min(100, s.health + hours);
+      else if (s.needs.every(v => v >= 30)) s.health = Math.min(100, s.health + rawHours);
       let bondDrain = 0.1;
       if (starving > 0) bondDrain += Math.min(0.8, starving * 0.25);
       if (s.criticalAt !== null) bondDrain += 0.6;
@@ -1149,7 +1207,7 @@
     completeDailyTask: rewardDailyTask,
     nannyStart, nannyStop, nannyPause, nannyCharge, NANNY_RATE,
     applyPriceOverrides, basePrices,
-    remedy, restart, healthTier, configureNight, configurePace, criticalRemaining, petName, nanny,
+    remedy, restart, healthTier, configureNight, configurePace, configureRestDays, isRestDayMs, criticalRemaining, petName, nanny,
     isAsleep, sleepStatus, wake, isNightMs, SLEEP_GAIN_DAY: SLEEP_GAIN_DAY, SLEEP_GAIN_NIGHT: SLEEP_GAIN_NIGHT,
     accessorySlot, isEquipped, careQuantityCap, dye, DYE, STAGES,
     moments, scheduleMoment, startMoment, resolveMoment });

@@ -1681,3 +1681,59 @@ test('sleep: nanny pauses billing and care while the pet sleeps', () => {
   assert.equal(s.points, points0, 'no babysitting fee while asleep');
   G.nannyStop(s);
 });
+
+test('rest days: config validation', () => {
+  assert.throws(() => G.configureRestDays({ enabled: 'yes', strength: 'slow', dates: [] }));
+  assert.throws(() => G.configureRestDays({ enabled: true, strength: 'fast', dates: [] }));
+  assert.throws(() => G.configureRestDays({ enabled: true, strength: 'slow', dates: ['not-a-date'] }));
+  assert.throws(() => G.configureRestDays({ enabled: true, strength: 'slow', dates: ['2026-13-40'] }));
+  G.configureRestDays({ enabled: false, strength: 'slow', dates: [] });
+});
+
+test('rest days: weekends and marked days barely drain needs', () => {
+  const SAT = new Date(2026, 10, 28, 0).getTime();    // Saturday 00:00
+  const SAT_PM = new Date(2026, 10, 28, 12).getTime(); // 12h later
+  const MON = new Date(2026, 10, 30, 8).getTime();    // Monday 08:00
+  G.configureNight({ enabled: false, start: 22, end: 6 });
+  G.configureRestDays({ enabled: true, strength: 'slow', dates: [] });
+  const base = pet('cat', SAT);
+  base.needs = [100, 100, 100, 100];
+  G.refresh(base, SAT_PM);
+  assert.ok(Math.abs(base.needs[0] - (100 - 12 * 0.1 * 15)) < 0.05, `slow weekend drains ~10%, got ${base.needs[0]}`);
+  G.configureRestDays({ enabled: true, strength: 'pause', dates: [] });
+  const paused = pet('cat', SAT);
+  paused.needs = [100, 100, 100, 100];
+  G.refresh(paused, SAT_PM);
+  assert.equal(paused.needs[0], 100, 'pause weekend freezes needs completely');
+  // A weekday still drains at full speed.
+  G.configureRestDays({ enabled: true, strength: 'pause', dates: [] });
+  const mon = pet('cat', MON);
+  mon.needs = [100, 100, 100, 100];
+  G.refresh(mon, new Date(2026, 10, 30, 20).getTime());
+  assert.ok(mon.needs[0] < 100, `weekday drains normally, got ${mon.needs[0]}`);
+  // Custom marked day: a Monday counts as rest when the player marks it.
+  G.configureRestDays({ enabled: true, strength: 'pause', dates: ['2026-11-30'] });
+  const marked = pet('cat', MON);
+  marked.needs = [100, 100, 100, 100];
+  G.refresh(marked, new Date(2026, 10, 30, 20).getTime());
+  assert.equal(marked.needs[0], 100, 'marked weekday freezes too');
+  // Health recovery still runs on real time during a paused rest day.
+  marked.needs = [80, 80, 80, 80];
+  marked.health = 50;
+  const before = marked.health;
+  G.refresh(marked, new Date(2026, 10, 30, 22).getTime());
+  assert.ok(marked.health > before, 'health recovers in real time on rest days');
+  G.configureRestDays({ enabled: false, strength: 'slow', dates: [] });
+});
+
+test('rest days: night rate and rest rate stack', () => {
+  // Saturday 00:30-02:30: night window 22-06 AND a rest day.
+  G.configureNight({ enabled: true, start: 22, end: 6 });
+  G.configureRestDays({ enabled: true, strength: 'slow', dates: [] });
+  const s = pet('cat', new Date(2026, 10, 28, 0, 30).getTime());
+  s.needs = [100, 100, 100, 100];
+  G.refresh(s, new Date(2026, 10, 28, 2, 30).getTime());
+  assert.ok(s.needs[0] > 97, `night+rest stacks to a crawl, got ${s.needs[0]}`);
+  G.configureNight({ enabled: false, start: 22, end: 6 });
+  G.configureRestDays({ enabled: false, strength: 'slow', dates: [] });
+});
