@@ -50,6 +50,11 @@ OPS_TOKEN=<上一步的串> PORT=8080 node server.js
 项目自带 `Dockerfile` + `docker-compose.yml`，零 npm 依赖，镜像秒级构建。
 统计数据与全局配置通过 `./data` 挂载持久化，升级不丢。
 
+**资源占用（实测）**：镜像拉取约 50 MB、运行时磁盘约 190 MB；空闲内存
+22 MB、空闲 CPU 0%，1 核 1G 的入门服务器即可。容器有 256 MB 内存上限
+保险，可在 1Panel 资源面板直观查看。默认对外端口 **8765**（避开常见
+的 8080），想换在 `.env` 里改 `PORT` 后重跑 `./deploy.sh`。
+
 ```bash
 # 克隆到服务器
 git clone https://github.com/babydu/yaya-grow-up-Webgame.git
@@ -64,7 +69,7 @@ cd yaya-grow-up-Webgame
 
 1Panel 侧的收尾（约 3 分钟）：
 
-1. 面板「网站」→ 创建网站 → 反向代理，目标 `http://127.0.0.1:8080`
+1. 面板「网站」→ 创建网站 → 反向代理，目标 `http://127.0.0.1:8765`
 2. 站点设置 → HTTPS → 申请 Let's Encrypt 证书（一键签发）
 3. 打开 `https://你的域名/#ops=<adminToken>`（token 在 `config.js`）
 4. 后台顶部「运维写入密钥」填入 `.env` 里的 `OPS_TOKEN`，发布一次，黄色告警变绿即完成

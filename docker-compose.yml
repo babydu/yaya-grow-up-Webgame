@@ -5,9 +5,11 @@ services:
     container_name: yaya-grow-up
     restart: unless-stopped
     ports:
-      - "8080:8080"        # 与 1Panel 反向代理指向的端口一致
+      # 对外端口可在 .env 里用 PORT 覆盖；容器内部固定 8080
+      - "${PORT:-8765}:8080"
     environment:
       - PORT=8080
       - OPS_TOKEN=${OPS_TOKEN:?缺少 OPS_TOKEN，请先编辑 .env}
     volumes:
       - ./data:/app/data   # 统计与全局配置持久化，升级不丢
+    mem_limit: 256m        # 1Panel 资源面板可直观查看，防 V8 堆异常膨胀

@@ -19,6 +19,10 @@ if [ ! -f .env ]; then
   cat > .env <<EOF
 # 后台「运维写入密钥」请填这一串（首次部署后到后台粘贴一次即可）
 OPS_TOKEN=$TOKEN
+
+# 对外端口（默认 8765，与常见 8080/Nginx 冲突避开）
+# 改动后重新运行 ./deploy.sh，并同步 1Panel 反向代理目标端口
+PORT=8765
 EOF
   echo "已生成 OPS_TOKEN 并写入 .env（请妥善保管，不要删除）"
 fi
@@ -26,15 +30,19 @@ fi
 # 2) 构建并启动
 $DC up -d --build
 
+PORT_VALUE=$(grep -E '^PORT=' .env 2>/dev/null | cut -d= -f2)
+PORT_VALUE=${PORT_VALUE:-8765}
+
 echo
 echo "================ 已启动 ================"
-echo "本机访问:  http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):8080"
+echo "本机访问:  http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):$PORT_VALUE"
 echo
 echo "下一步（在 1Panel 里做）:"
-echo "  1. 「网站」→ 创建网站 → 反向代理，目标 http://127.0.0.1:8080"
+echo "  1. 「网站」→ 创建网站 → 反向代理，目标 http://127.0.0.1:$PORT_VALUE"
 echo "  2. 站点设置 → HTTPS → 申请 Let's Encrypt 证书（一键）"
 echo "  3. 打开 https://你的域名/#ops=<adminToken> 进后台"
 echo "     adminToken 在 config.js 的 window.SITE_CONFIG.adminToken"
 echo "  4. 后台顶部「运维写入密钥」填入 .env 里的 OPS_TOKEN，发布一次"
 echo "     黄色告警变绿即完成加固"
 echo "========================================="
+echo "提示: 想换端口就改 .env 里的 PORT，再跑一次 ./deploy.sh"

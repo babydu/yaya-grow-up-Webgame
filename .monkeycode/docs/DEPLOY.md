@@ -57,8 +57,9 @@ cd yaya-grow-up-Webgame
 - `upgrade.sh` 备份 `data/` → `git pull` → 重建容器，运行数据零丢失。
 - 容器零 npm 依赖，`server.js` 仅用 Node 内置模块，镜像秒级构建。
 - `data/` 以卷挂载持久化：统计、全局配置、广告/公告/价格覆盖都不丢。
-- 1Panel 收尾：网站反向代理到 `http://127.0.0.1:8080` + 一键申请 HTTPS 证书（PWA 离线与安装需要 HTTPS）。
-- 修改端口：改 `docker-compose.yml` 的 `ports` 与反向代理目标。
+- 1Panel 收尾：网站反向代理到 `http://127.0.0.1:8765` + 一键申请 HTTPS 证书（PWA 离线与安装需要 HTTPS）。
+- 修改端口：默认对外端口 **8765**（避开 8080 等常用端口），改 `.env` 的 `PORT` 后重跑 `./deploy.sh`，同步更新反向代理目标。
+- 资源占用（实测）：镜像拉取约 50 MB、运行时磁盘约 190 MB、空闲内存 22 MB、空闲 CPU 0%；`mem_limit: 256m` 做膨胀保险，1 核 1G 服务器即可。
 
 ### B. 直接运行 Node 进程
 
