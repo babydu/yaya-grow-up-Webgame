@@ -24,28 +24,7 @@
 
 ## 快速开始
 
-### 纯静态（零依赖）
-
-```bash
-# 任意静态服务器即可，例如：
-python3 -m http.server 8000
-# 或
-npx serve
-```
-
-浏览器打开 `http://localhost:8000`。
-
-### 带后端（推荐生产）
-
-```bash
-# 1) 生成随机写入密钥
-node server.js --print-token
-
-# 2) 用它启动
-OPS_TOKEN=<上一步的串> PORT=8080 node server.js
-```
-
-### Docker / 1Panel 部署（最省事）
+### Docker / 1Panel 部署（推荐，最省事）
 
 项目自带 `Dockerfile` + `docker-compose.yml`，零 npm 依赖，镜像秒级构建。
 统计数据与全局配置通过 `./data` 挂载持久化，升级不丢。
@@ -75,7 +54,28 @@ cd yaya-grow-up-Webgame
 4. 后台顶部「运维写入密钥」填入 `.env` 里的 `OPS_TOKEN`，发布一次，黄色告警变绿即完成
 
 > PWA（离线可玩、安装到桌面）要求 HTTPS，第 2 步签发证书后自动生效。
-> 修改端口改 `docker-compose.yml` 的 `ports` 与反向代理目标即可。
+
+### 直接运行 Node（无 Docker 的替代）
+
+```bash
+# 1) 生成随机写入密钥
+node server.js --print-token
+
+# 2) 用它启动（端口自定义）
+OPS_TOKEN=<上一步的串> PORT=8765 node server.js
+```
+
+### 纯静态（零依赖，不可后台发布/无统计）
+
+```bash
+# 任意静态服务器即可，例如：
+python3 -m http.server 8000
+# 或
+npx serve
+```
+
+后台改配置用「导出 data/site-config.json」替换部署文件；PWA 的
+service worker 同样需要 HTTPS 才生效。
 
 .env 与两个脚本说明：
 
@@ -131,7 +131,7 @@ https://你的域名/#ops=<adminToken>
 `adminToken` 定义在 `config.js`。**注意它对所有访客可见，只负责隐藏面板**；真正保护「发布」的是服务器环境变量 `OPS_TOKEN`。首次部署时：
 
 1. `node server.js --print-token` 生成随机密钥
-2. `OPS_TOKEN=<密钥> PORT=8080 node server.js` 启动
+2. `OPS_TOKEN=<密钥> PORT=8765 node server.js` 启动
 3. 后台「运维写入密钥」填入同一串并发布验证
 
 后台打开时会自动检测并在顶部显示「部署安全」状态：未设置 `OPS_TOKEN` 显示黄色引导，设置后显示绿色已保护。后台功能：

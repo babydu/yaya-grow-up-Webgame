@@ -29,7 +29,7 @@
 node server.js --print-token
 
 # 2) 用它启动（生产建议写进 systemd/PM2/.env，不要明文留在历史命令里）
-OPS_TOKEN=<上一步的串> PORT=8080 node server.js
+OPS_TOKEN=<上一步的串> PORT=8765 node server.js
 
 # 3) 打开后台 https://你的域名/#ops=<adminToken>，在「运维写入密钥」填入同一串，
 #    点一次「发布到服务器」验证；统计与在线人数也会自动切到该密钥。
@@ -43,6 +43,9 @@ OPS_TOKEN=<上一步的串> PORT=8080 node server.js
 ## 三、两种发布方式（按部署形态选）
 
 **推荐先用 Docker（见第三节 A），一条命令部署、一条命令升级。**
+
+> Docker 用户：`deploy.sh` 已自动生成并注入 `OPS_TOKEN`，本节可跳过；
+> 本节面向直接运行 `node server.js`（无 Docker）的部署形态。
 
 ### A. Docker / 1Panel（最省事）
 
@@ -64,7 +67,7 @@ cd yaya-grow-up-Webgame
 ### B. 直接运行 Node 进程
 
 1. **带后端（推荐，可实时全站生效）**
-   - 运行：`PORT=8080 OPS_TOKEN=你的密钥 node server.js`
+   - 运行：`PORT=8765 OPS_TOKEN=你的密钥 node server.js`
    - `server.js` 同时提供静态站点与 `POST /api/site-config`（带 `x-admin-token` 校验），后台「发布到服务器」会原子写入 `data/site-config.json`，所有访客下次加载即生效。
    - 生产建议 Nginx/Caddy 反向代理到 `server.js`，开启 HTTPS。
 2. **纯静态（无 Node）**
