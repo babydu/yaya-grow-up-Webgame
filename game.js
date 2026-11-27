@@ -224,7 +224,7 @@ function render() {
     const reason = windowed ? `健康度已经耗尽，约 ${hours} 小时后会悄悄离开。${hint}` : `健康度已经很低，再不照顾就有离开的风险。${hint}`;
     const reviveLabel = elixirOwned ? '使用回春灵药（+60）' : kitUsable ? '使用安心药箱（+40）' : '购买并使用回春灵药（60 积分）';
     const vig = G.vigilStatus(state);
-    const vigilBtn = vig.available ? `<button class="secondary" type="button" id="vigil-button">守夜求援（约 ${Math.round(vig.seconds/60)} 分钟）</button>` : '';
+    const vigilBtn = vig.available ? `<button class="secondary" type="button" id="vigil-button">守夜求药（约 ${Math.round(vig.seconds/60)} 分钟·须全程陪同）</button>` : '';
     $('critical-banner').hidden = false;
     $('critical-banner').innerHTML = `<div class="critical-copy"><strong>${escapeHtml(petName())}病危了</strong><p>${reason}</p></div><div class="critical-actions"><button class="primary" id="revive-button">${reviveLabel}</button>${vigilBtn}</div>`;
   } else $('critical-banner').hidden = true;
@@ -722,23 +722,37 @@ function runNanny() {
     render();
   }
 }
-let vigilRunning=false, vigilEnd=0, vigilDur=150000, vigilId=null;
+let vigilRunning=false, vigilEnd=0, vigilDur=150000, vigilId=null, vigilBroken=false;
 function fmtClock(ms){const t=Math.max(0,Math.ceil(ms/1000));return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;}
 function openVigil(){
   const st=G.vigilStatus(state);
   if(!st.available){toast(st.reason||'现在不需要守夜');return;}
-  vigilDur=st.seconds*1000; vigilRunning=false; vigilEnd=0;
+  vigilDur=st.seconds*1000; vigilRunning=false; vigilEnd=0; vigilBroken=false;
   if(vigilId){clearInterval(vigilId);vigilId=null;}
   $('vigil-icon').innerHTML=icon('moon');
-  $('vigil-desc').textContent=`${G.petName(state)}病危了，还差一点积分买回春灵药。安静地陪它守一夜，天亮就能凑齐。`;
+  $('vigil-desc').textContent=`${G.petName(state)}病危了，还差一点积分买回春灵药。守夜期间请一直留在这一页陪着它：离开页面、切到别的标签或关掉这扇窗，这一夜就白守了，只能从头再来。`;
   $('vigil-timer').textContent=fmtClock(vigilDur);
   $('vigil-progress').style.width='0%';
   $('vigil-toggle').textContent='开始守夜';
   $('vigil-toggle').disabled=false;
   if(!$('vigil-dialog').open)$('vigil-dialog').showModal();
 }
+function breakVigil(){
+  if(!vigilRunning)return;
+  vigilRunning=false; vigilBroken=true;
+  if(vigilId){clearInterval(vigilId);vigilId=null;}
+  $('vigil-progress').style.width='0%';
+  $('vigil-timer').textContent=fmtClock(vigilDur);
+  $('vigil-desc').textContent=`守夜被打断，刚攒的心意散了。它还在等你，从头再来吧——这次别走开。`;
+  $('vigil-toggle').textContent='重新开始守夜';
+  $('vigil-toggle').disabled=false;
+  toast(`守夜中断，进度清零。${G.petName(state)}还在等你。`);
+}
 function vigilTick(){
   if(!vigilRunning)return;
+  // A vigil only counts while the player stays on this page with the window
+  // open: leaving the tab or dismissing the dialog forfeits the whole night.
+  if(document.hidden || !$('vigil-dialog').open){ breakVigil(); return; }
   const remain=vigilEnd-Date.now();
   $('vigil-timer').textContent=fmtClock(remain);
   $('vigil-progress').style.width=`${Math.min(100,100*(1-Math.max(0,remain)/vigilDur))}%`;
@@ -755,14 +769,16 @@ function startVigil(){
   if(vigilRunning)return;
   const st=G.vigilStatus(state);
   if(!st.available){toast(st.reason||'现在不需要守夜');return;}
-  vigilDur=st.seconds*1000;
+  vigilDur=st.seconds*1000; vigilBroken=false;
   vigilRunning=true; vigilEnd=Date.now()+vigilDur;
+  $('vigil-desc').textContent=`夜深了，它靠在你的手边睡睡醒醒。别走开，这一页要一直亮着。`;
   $('vigil-toggle').textContent='守夜中……'; $('vigil-toggle').disabled=true;
   if(vigilId)clearInterval(vigilId);
   vigilId=setInterval(vigilTick,250);
   vigilTick();
 }
-function cancelVigil(){vigilRunning=false; if(vigilId){clearInterval(vigilId);vigilId=null;}}
+// Closing the window forfeits the night, same as leaving the tab.
+$('vigil-dialog').addEventListener('close',()=>{ if(vigilRunning) breakVigil(); });
 function toggleCare() {
   if(running){pause();return;}
   if(document.hidden)return;
@@ -984,7 +1000,6 @@ document.addEventListener('change',async e=>{
   }
 });
 $('care-dialog').addEventListener('close',()=>{pause();careId=null;render();});
-$('vigil-dialog').addEventListener('close',cancelVigil);
 $('adopt-dialog').addEventListener('cancel',e=>e.preventDefault());
 document.addEventListener('visibilitychange',()=>{if(document.hidden){if(!running||!state.task||!backgroundCare[state.task.actionId])pause();}else{render();updateTimer();pulseMoment();}});
 window.addEventListener('pagehide',pause);
