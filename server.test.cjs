@@ -42,7 +42,8 @@ test('site-config API: public read, token-guarded global write that persists', a
           { id: 'a1', slot: 'bottom', text: '赞助卡片文案', link: 'https://example.com', enabled: true, junk: 'drop' }
         ] },
         announcement: { enabled: true, version: 1234, title: '公告标题', body: '公告正文', link: '', ticker: true, modal: true },
-        prices: { 'cat-milk': 25, 'bad': 0, 'neg': -5, 'big': 9999999 }
+        prices: { 'cat-milk': 25, 'bad': 0, 'neg': -5, 'big': 9999999 },
+        gameplay: { vigilSeconds: 90, junk: 'drop' }
       })
     });
     assert.equal(r.status, 200);
@@ -51,6 +52,7 @@ test('site-config API: public read, token-guarded global write that persists', a
     // A fresh read reflects the global write.
     r = await fetch(base + '/api/site-config');
     const cfg = await r.json();
+    assert.equal(cfg.gameplay.vigilSeconds, 90);
     assert.equal(cfg.site.footerNote, '全站生效的页脚');
     assert.equal(cfg.ads.topEnabled, false);
     assert.equal(cfg.ads.items.length, 1);

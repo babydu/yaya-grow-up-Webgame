@@ -103,6 +103,10 @@ function sanitizeConfig(input) {
       if (Number.isSafeInteger(num) && num >= 1 && num <= 1000000) { out.prices[id] = num; n++; }
     }
   }
+  if (input.gameplay && typeof input.gameplay === 'object') {
+    const v = input.gameplay.vigilSeconds;
+    out.gameplay = { vigilSeconds: (Number.isSafeInteger(v) && v >= 60 && v <= 600) ? v : 150 };
+  }
   if (input.analytics && typeof input.analytics === 'object') {
     const a = input.analytics;
     const mid = String(a.measurementId || '').trim().slice(0, 40);

@@ -75,6 +75,11 @@
             <button type="button" class="ops-chip" id="ops-prices-reset">恢复默认价格</button>
           </section>
           <section class="ops-sec">
+            <h3>玩法参数</h3>
+            <label class="ops-field"><span>守夜时长（秒，60-600）</span><input type="number" id="ops-vigil" min="60" max="600" step="30" placeholder="150"></label>
+            <p class="ops-hint">病危保底「为它守夜」需要玩家全程留在页面，离开即作废。积分固定补齐到药价（60 分），缩短时长只是减轻守候负担、不会少给。默认 150 秒（约 2.5 分钟），对所有访客生效。</p>
+          </section>
+          <section class="ops-sec">
             <h3>统计与分析</h3>
             <label class="ops-check"><input type="checkbox" id="ops-an-firstParty"> 启用匿名统计（页面时长/照护次数等，无个人身份）</label>
             <label class="ops-field"><span>第三方统计</span>
@@ -187,8 +192,9 @@
     $ops('#ops-topOn').checked = !!draft.ads.topEnabled;
     $ops('#ops-bottomOn').checked = !!draft.ads.bottomEnabled;
     $ops('#ops-footerNote').value = draft.site.footerNote || '';
+    $ops('#ops-vigil').value = (draft.gameplay && draft.gameplay.vigilSeconds) || '';
     $ops('#ops-ads').innerHTML = draft.ads.items.length ? draft.ads.items.map(adRow).join('') : '<p class="ops-empty">还没有广告。用上面的快捷按钮添加。</p>';
-    $ops('#ops-json').value = JSON.stringify({ site: draft.site, ads: draft.ads, announcement: draft.announcement }, null, 2);
+    $ops('#ops-json').value = JSON.stringify({ site: draft.site, ads: draft.ads, announcement: draft.announcement, gameplay: draft.gameplay }, null, 2);
     try { $ops('#ops-secret').value = sessionStorage.getItem('ops-write-token') || ''; } catch (_) { /* ignore */ }
     const an = draft.analytics || {};
     $ops('#ops-an-firstParty').checked = an.firstParty !== false;
@@ -220,6 +226,10 @@
     draft.ads.topEnabled = $ops('#ops-topOn').checked;
     draft.ads.bottomEnabled = $ops('#ops-bottomOn').checked;
     draft.site.footerNote = $ops('#ops-footerNote').value.trim();
+    const vigilRaw = Number($ops('#ops-vigil').value);
+    const vigilOk = Number.isSafeInteger(vigilRaw) && vigilRaw >= 60 && vigilRaw <= 600;
+    draft.gameplay = { vigilSeconds: vigilOk ? vigilRaw : 150 };
+    if (!vigilOk && $ops('#ops-vigil').value.trim() !== '') note('守夜时长须为 60-600 秒之间的整数，已按默认 150 处理。');
     root.querySelectorAll('.ops-ad').forEach(row => {
       const i = Number(row.dataset.i);
       const item = draft.ads.items[i]; if (!item) return;
@@ -473,7 +483,7 @@
       return;
     }
     if (t.closest('#ops-applyjson')) {
-      try { draft = JSON.parse($ops('#ops-json').value); S.BASE && (draft.site = draft.site || { footerNote: '' }); draft.ads = draft.ads || { topEnabled: true, bottomEnabled: true, items: [] }; draft.announcement = draft.announcement || { enabled: false, version: 0, title: '', body: '', link: '', ticker: true, modal: true }; draft.prices = draft.prices || {}; draft.analytics = draft.analytics || { firstParty: true, provider: '', measurementId: '', respectDNT: true, requireConsent: false }; }
+      try { draft = JSON.parse($ops('#ops-json').value); S.BASE && (draft.site = draft.site || { footerNote: '' }); draft.ads = draft.ads || { topEnabled: true, bottomEnabled: true, items: [] }; draft.announcement = draft.announcement || { enabled: false, version: 0, title: '', body: '', link: '', ticker: true, modal: true }; draft.prices = draft.prices || {}; draft.gameplay = draft.gameplay || { vigilSeconds: 150 }; draft.analytics = draft.analytics || { firstParty: true, provider: '', measurementId: '', respectDNT: true, requireConsent: false }; }
       catch (_) { note('JSON 有误。'); return; }
       renderEditor(); note('已载入到编辑器，点「发布」或「预览」生效。'); return;
     }

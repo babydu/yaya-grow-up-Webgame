@@ -18,6 +18,7 @@
     ads: { topEnabled: true, bottomEnabled: true, items: [] },
     announcement: { enabled: false, version: 0, title: '', body: '', link: '', ticker: true, modal: true },
     prices: {},
+    gameplay: { vigilSeconds: 150 },
     analytics: { firstParty: true, provider: '', measurementId: '', respectDNT: true, requireConsent: false }
   };
 
@@ -42,6 +43,10 @@
     }
     if (extra.announcement && typeof extra.announcement === 'object') out.announcement = { ...out.announcement, ...extra.announcement };
     if (extra.prices && typeof extra.prices === 'object' && !Array.isArray(extra.prices)) out.prices = { ...out.prices, ...extra.prices };
+    if (extra.gameplay && typeof extra.gameplay === 'object') {
+      const v = extra.gameplay.vigilSeconds;
+      if (Number.isSafeInteger(v) && v >= 60 && v <= 600) out.gameplay.vigilSeconds = v;
+    }
     if (extra.analytics && typeof extra.analytics === 'object') out.analytics = { ...out.analytics, ...extra.analytics };
     return out;
   }
@@ -62,13 +67,17 @@
   }
   function adminToken() { return String((codeDefaults().adminToken) || '').trim(); }
 
-  // Push the effective price table into the engine so shops/buy all agree.
+  // Push the effective price table and gameplay tuning into the engine so
+  // shops/buy and the vigil timer all agree across every visitor.
   function syncPrices() {
     const g = window.GameEngine;
     if (g && typeof g.applyPriceOverrides === 'function') {
       g.applyPriceOverrides(getConfig().prices || {});
-      try { window.dispatchEvent(new Event('site-config-applied')); } catch (_) { /* ignore */ }
     }
+    if (g && typeof g.configureVigil === 'function') {
+      try { g.configureVigil(getConfig().gameplay.vigilSeconds); } catch (_) { /* keep default */ }
+    }
+    try { window.dispatchEvent(new Event('site-config-applied')); } catch (_) { /* ignore */ }
   }
   function load() {
     if (readyPromise) return readyPromise;
