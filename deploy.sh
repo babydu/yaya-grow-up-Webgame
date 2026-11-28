@@ -4,6 +4,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# 并发锁：与 upgrade.sh 互斥，防止同时跑写坏 data/（锁定文件在 /tmp，
+# 退出自动释放，服务器的其他服务完全无感）
+exec 9>/tmp/yaya-grow-up-deploy.lock
+if ! flock -n 9; then
+  echo "另一个部署/升级正在运行，请等它完成后再试。"
+  exit 1
+fi
+
 # shellcheck source=lib-network.sh
 if [ -f ./lib-network.sh ]; then . ./lib-network.sh; else
   prepull_base() { :; }

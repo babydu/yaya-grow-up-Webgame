@@ -3,6 +3,13 @@
 # 国内服务器拉 GitHub 与 Docker Hub 常常超时，这里自动按优先级找一个
 # 可用通道，全部失败再回退直连。
 #
+# 隔离原则（本模块的硬约束）：
+#   - 只对"本次 git/docker 命令"生效（git -c / 临时 URL），不写全局
+#     git config、不改 /etc、不改 docker daemon.json、不用 sudo
+#   - 不修改环境变量、不动防火墙、不开端口、不后台驻留进程
+#   - 磁盘剩余不足 600MB 时直接跳过镜像拉取，不把盘写满
+#   - 所有探测都是只读连通性测试，失败回退直连，流程永不因网络中断
+#
 # 手动覆盖（可选，写在 .env 或直接导出）：
 #   PROXY=                指定代理，跳过自动探测
 #   GITHUB_MIRROR=        指定 GitHub 加速镜像前缀，跳过探测
@@ -104,18 +111,21 @@ prepull_base() {
     return 0
   fi
 
-  # 有本地代理时不折腾镜像源，直接让 docker 走系统代理通道
-  local proxy
-  proxy=$(probe_proxy || true)
-  if [ -n "$proxy" ]; then
-    echo "  基础镜像走代理（若 docker daemon 未配代理，会自动回退镜像源）"
+  # 守住服务器整体可用性：镜像展开约 200MB，剩余空间不足直接放弃加速，
+  # 绝不把磁盘写满拖垮其他服务。
+  local free_mb
+  free_mb=$(df -Pm . 2>/dev/null | awk 'NR==2 {print $4}')
+  if [ -n "${free_mb:-}" ] && [ "$free_mb" -lt 600 ] 2>/dev/null; then
+    echo "  磁盘剩余 ${free_mb}MB 不足 600MB，跳过镜像拉取，构建时直连"
+    return 0
   fi
 
   local m full
   for m in ${DOCKER_MIRROR:-} $DOCKER_MIRRORS; do
     full="$m/library/$image"
     echo "  尝试镜像源: $m"
-    if docker pull "$full"; then
+    # timeout 兜底：单个源卡死时不拖垮整个升级流程
+    if timeout 300 docker pull "$full"; then
       docker tag "$full" "$image"
       echo "  已通过 $m 拉取并标记为 $image"
       return 0
@@ -123,5 +133,5 @@ prepull_base() {
   done
 
   echo "  镜像源均不可用，直连拉取（慢属正常）"
-  docker pull "$image" || true
+  timeout 600 docker pull "$image" || echo "  直连拉取失败，构建会再次尝试"
 }
