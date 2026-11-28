@@ -35,16 +35,23 @@
 的 8080），想换在 `.env` 里改 `PORT` 后重跑 `./deploy.sh`。
 
 ```bash
-# 克隆到服务器
+# 国内服务器一键安装（自动探测代理/GitHub 镜像加速 clone）
+bash <(curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/babydu/yaya-grow-up-Webgame/main/install.sh)
+
+# 或者手动克隆再部署
 git clone https://github.com/babydu/yaya-grow-up-Webgame.git
 cd yaya-grow-up-Webgame
-
-# 一键部署（自动生成 OPS_TOKEN 写入 .env，构建并启动）
 ./deploy.sh
 
 # 之后每次升级
 ./upgrade.sh
 ```
+
+`upgrade.sh` 与 `deploy.sh` 内置国内网络优化：按优先级自动尝试环境变量
+代理 → 本地常见代理端口（Clash/V2Ray 等）→ GitHub 镜像 → 直连；基础
+镜像 `node:22-alpine` 也依次尝试 Docker 加速源后打回原名。全部失败回退
+直连，不影响流程。想固定通道可在 `.env` 加 `PROXY=http://127.0.0.1:7890`
+或 `GITHUB_MIRROR=ghfast.top`；`NO_MIRROR=1` 强制直连。
 
 1Panel 侧的收尾（约 3 分钟）：
 

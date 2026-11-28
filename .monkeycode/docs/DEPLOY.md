@@ -50,11 +50,19 @@ OPS_TOKEN=<上一步的串> PORT=8765 node server.js
 ### A. Docker / 1Panel（最省事）
 
 ```bash
+# 国内服务器一键安装（自动探测代理/GitHub 镜像加速 clone）
+bash <(curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/babydu/yaya-grow-up-Webgame/main/install.sh)
+
+# 或者手动克隆再部署
 git clone https://github.com/babydu/yaya-grow-up-Webgame.git
 cd yaya-grow-up-Webgame
 ./deploy.sh      # 首次部署，自动生成 OPS_TOKEN
 ./upgrade.sh     # 之后每次升级
 ```
+
+- `deploy.sh` 自动生成 `.env`（含随机 `OPS_TOKEN`），构建并启动容器。
+- `upgrade.sh` 备份 `data/` → `git pull` → 重建容器，运行数据零丢失。
+- 国内网络加速（`lib-network.sh`）：按优先级自动探测环境变量代理 → 本地常见代理端口（Clash/V2Ray 等）→ GitHub 镜像 → 直连；基础镜像依次尝试 Docker 加速源（daocloud/1Panel 等）后打回原名。全部失败回退直连。手动覆盖：`.env` 里设 `PROXY=`、`GITHUB_MIRROR=`、`DOCKER_MIRROR=`，或 `NO_MIRROR=1` 强制直连。
 
 - `deploy.sh` 自动生成 `.env`（含随机 `OPS_TOKEN`），构建并启动容器。
 - `upgrade.sh` 备份 `data/` → `git pull` → 重建容器，运行数据零丢失。

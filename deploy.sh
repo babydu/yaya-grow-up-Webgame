@@ -4,6 +4,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# shellcheck source=lib-network.sh
+if [ -f ./lib-network.sh ]; then . ./lib-network.sh; else
+  prepull_base() { :; }
+fi
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "未检测到 docker。1Panel 用户请在面板「容器」中确认 Docker 已安装。"
   exit 1
@@ -28,6 +33,8 @@ EOF
 fi
 
 # 2) 构建并启动
+echo "加速准备: 拉取基础镜像（国内网络自动选代理/镜像源）"
+prepull_base node:22-alpine
 $DC up -d --build
 
 PORT_VALUE=$(grep -E '^PORT=' .env 2>/dev/null | cut -d= -f2)
