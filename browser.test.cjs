@@ -78,9 +78,25 @@ const assert = require('node:assert/strict');
     assert.match(await page.locator('#guide-next').innerText(), /开始陪伴/);
     await page.locator('#guide-next').click();
     await page.locator('#guide-dialog').waitFor({ state: 'hidden' });
+    // Rest-day settings: new sources (statutory holidays, weekends) and the
+    // advance reminder all appear and persist.
+    await page.locator('aside [data-page="settings"]').click();
+    await page.waitForTimeout(200);
+    assert.ok(await page.locator('#rest-enabled').count());
+    assert.ok(await page.locator('#rest-auto').count(), 'auto holiday switch present');
+    assert.ok(await page.locator('#rest-weekends').count(), 'weekend switch present');
+    assert.ok(await page.locator('#rest-remind-enabled').count(), 'reminder switch present');
+    assert.ok(await page.locator('#rest-remind-days').count(), 'reminder horizon select present');
+    await page.locator('#rest-enabled').click();
+    await page.waitForTimeout(300);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('slow-growing-restdays') || '{}'));
+    assert.equal(stored.enabled, true);
+    assert.equal(stored.auto, true);
+    assert.equal(stored.weekends, true);
+    assert.equal(stored.remind.enabled, true);
+    assert.equal(stored.remind.days, 1);
     assert.equal(await page.evaluate(() => localStorage.getItem('slow-growing-guide-seen')), '1');
     // 跳过路径：重看引导再跳过
-    await page.locator('aside [data-page="settings"]').click();
     await page.locator('#replay-guide').click();
     await page.locator('#guide-dialog').waitFor({ state: 'visible' });
     await page.locator('#guide-skip').click();

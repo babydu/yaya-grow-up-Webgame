@@ -43,11 +43,54 @@
     assert(own(PACE, id), '养育节奏无效');
     pace = id;
   }
-  // Rest-day mode: on weekends and player-marked days the pet's needs drain at
-  // a crawl (slow) or not at all (pause), so the player can keep their own
-  // weekends. Health recovery and the critical window keep using real time.
+  // Rest-day mode: on weekends, statutory Chinese holidays and player-marked
+  // days the pet's needs drain at a crawl (slow) or not at all (pause), so the
+  // player can keep their own weekends. Health recovery and the critical
+  // window keep using real time.
   const REST_RATES = { slow: 0.1, pause: 0 };
-  let restDays = { enabled: false, strength: 'slow', dates: [] };
+  let restDays = { enabled: false, strength: 'slow', dates: [], auto: true, weekends: true, remind: { enabled: true, days: 1 } };
+
+  // Chinese statutory holidays. Fixed-date ones are computed; the four that
+  // follow the lunar calendar (Spring Festival, Qingming, Dragon Boat, Mid
+  // Autumn) plus Qingming drifts are stored per year below. Table is an
+  // offline approximation: a far-future year may be off by a day, which the
+  // player can always correct by adding the date manually.
+  // { year: [spring festivals: 正月初一..初三, qingming, duanwu, midAutumn] }
+  const LUNAR_TABLE = {
+    2025: ['2025-01-29', '2025-01-30', '2025-01-31', '2025-04-04', '2025-05-31', '2025-10-06'],
+    2026: ['2026-02-17', '2026-02-18', '2026-02-19', '2026-04-05', '2026-06-19', '2026-09-25'],
+    2027: ['2027-02-06', '2027-02-07', '2027-02-08', '2027-04-05', '2027-06-09', '2027-09-15'],
+    2028: ['2028-01-26', '2028-01-27', '2028-01-28', '2028-04-04', '2028-05-28', '2028-10-03'],
+    2029: ['2029-02-13', '2029-02-14', '2029-02-15', '2029-04-04', '2029-06-16', '2029-09-22'],
+    2030: ['2030-02-03', '2030-02-04', '2030-02-05', '2030-04-05', '2030-06-05', '2030-09-12'],
+    2031: ['2031-01-23', '2031-01-24', '2031-01-25', '2031-04-05', '2031-06-24', '2031-10-01'],
+    2032: ['2032-02-11', '2032-02-12', '2032-02-13', '2032-04-04', '2032-06-13', '2032-09-20'],
+    2033: ['2033-01-31', '2033-02-01', '2033-02-02', '2033-04-04', '2033-06-03', '2033-09-09'],
+    2034: ['2034-02-19', '2034-02-20', '2034-02-21', '2034-04-05', '2034-06-22', '2034-09-28'],
+    2035: ['2035-02-08', '2035-02-09', '2035-02-10', '2035-04-05', '2035-06-10', '2035-09-16'],
+    2036: ['2036-01-28', '2036-01-29', '2036-01-30', '2036-04-04', '2036-05-30', '2036-10-04'],
+    2037: ['2037-02-15', '2037-02-16', '2037-02-17', '2037-04-04', '2037-06-18', '2037-09-24'],
+    2038: ['2038-02-04', '2038-02-05', '2038-02-06', '2038-04-04', '2038-06-07', '2038-09-13'],
+    2039: ['2039-01-24', '2039-01-25', '2039-01-26', '2039-04-04', '2039-06-26', '2039-10-02'],
+    2040: ['2040-02-12', '2040-02-13', '2040-02-14', '2040-04-04', '2040-06-14', '2040-09-21']
+  };
+  const HOLIDAY_NAMES = { };
+  function statutoryHolidays(year) {
+    const days = [];
+    const push = (iso, name) => { days.push(iso); HOLIDAY_NAMES[iso] = name; };
+    push(`${year}-01-01`, '元旦');
+    const lunar = LUNAR_TABLE[year];
+    if (lunar) {
+      push(lunar[0], '春节'); push(lunar[1], '春节'); push(lunar[2], '春节');
+      push(lunar[3], '清明'); push(lunar[4], '端午'); push(lunar[5], '中秋');
+    }
+    push(`${year}-05-01`, '劳动节');
+    push(`${year}-10-01`, '国庆节'); push(`${year}-10-02`, '国庆节'); push(`${year}-10-03`, '国庆节');
+    return days;
+  }
+  function holidayName(iso) {
+    return HOLIDAY_NAMES[iso] || '';
+  }
   function validIso(d) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
     const dt = new Date(d + 'T12:00:00');
@@ -55,18 +98,44 @@
   }
   function isoDay(t) {
     const d = new Date(t);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, 0)}`;
   }
   function isRestDayMs(t) {
     const dow = new Date(t).getDay();
-    if (dow === 0 || dow === 6) return true;
-    return restDays.dates.includes(isoDay(t));
+    if (restDays.weekends && (dow === 0 || dow === 6)) return true;
+    const iso = isoDay(t);
+    if (restDays.auto && statutoryHolidays(new Date(t).getFullYear()).includes(iso)) return true;
+    return restDays.dates.includes(iso);
+  }
+  function restDayReason(t) {
+    const dow = new Date(t).getDay();
+    const iso = isoDay(t);
+    if (restDays.weekends && (dow === 0 || dow === 6)) return dow === 6 ? '周六' : '周日';
+    const name = holidayName(iso);
+    if (restDays.auto && name) return name;
+    if (restDays.dates.includes(iso)) return '你标记的日子';
+    return null;
+  }
+  // Days within `days` ahead that will rest, for the "coming up" reminder.
+  function upcomingRestDays(from, days) {
+    const out = [];
+    for (let i = 1; i <= days; i++) {
+      const t = from + i * DAY;
+      const reason = restDayReason(t);
+      if (reason) out.push({ iso: isoDay(t), reason, offset: i });
+    }
+    return out;
   }
   function configureRestDays(config) {
     assert(record(config) && typeof config.enabled === 'boolean');
     assert(config.strength === 'slow' || config.strength === 'pause', '休息日强度无效');
     assert(Array.isArray(config.dates) && config.dates.every(validIso), '休息日日期无效');
-    restDays = { enabled: config.enabled, strength: config.strength, dates: [...new Set(config.dates)] };
+    const auto = config.auto !== false;
+    const weekends = config.weekends !== false;
+    const remind = (record(config.remind) && typeof config.remind.enabled === 'boolean')
+      ? { enabled: config.remind.enabled, days: [1, 3, 7].includes(config.remind.days) ? config.remind.days : 1 }
+      : { enabled: true, days: 1 };
+    restDays = { enabled: config.enabled, strength: config.strength, dates: [...new Set(config.dates)], auto, weekends, remind };
   }
   function isNightHour(t) {
     if (!night.enabled || night.start === night.end) return false;
@@ -1214,5 +1283,6 @@
     remedy, restart, healthTier, configureNight, configurePace, configureRestDays, isRestDayMs, criticalRemaining, petName, nanny,
     isAsleep, sleepStatus, wake, isNightMs, SLEEP_GAIN_DAY: SLEEP_GAIN_DAY, SLEEP_GAIN_NIGHT: SLEEP_GAIN_NIGHT,
     accessorySlot, isEquipped, careQuantityCap, dye, DYE, STAGES,
+    statutoryHolidays, holidayName, restDayReason, upcomingRestDays,
     moments, scheduleMoment, startMoment, resolveMoment });
 });

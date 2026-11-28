@@ -1750,3 +1750,45 @@ test('rest days: night rate and rest rate stack', () => {
   G.configureNight({ enabled: false, start: 22, end: 6 });
   G.configureRestDays({ enabled: false, strength: 'slow', dates: [] });
 });
+
+test('statutory holidays are recognised without manual marking', () => {
+  G.configureRestDays({ enabled: true, strength: 'slow', dates: [] });
+  const at = iso => new Date(iso + 'T12:00:00').getTime();
+  // 2025: Spring Festival Jan 29, National Day Oct 2, Mid Autumn Oct 6
+  assert.equal(G.isRestDayMs(at('2025-01-29')), true);
+  assert.equal(G.isRestDayMs(at('2025-10-02')), true);
+  assert.equal(G.isRestDayMs(at('2025-10-06')), true);
+  assert.equal(G.isRestDayMs(at('2025-10-08')), false);
+  assert.equal(G.restDayReason(at('2025-01-29')), '春节');
+  assert.equal(G.restDayReason(at('2026-06-19')), '端午');
+  // Weeks beyond the table fall back to fixed-date holidays only
+  assert.equal(G.isRestDayMs(at('2041-10-01')), true);
+  assert.equal(G.isRestDayMs(at('2041-01-30')), false);
+});
+
+test('rest-day sources can be turned off independently', () => {
+  const at = iso => new Date(iso + 'T12:00:00').getTime();
+  // Old saves omit auto/weekends/remind: defaults keep both sources on
+  G.configureRestDays({ enabled: true, strength: 'pause', dates: [] });
+  assert.equal(G.isRestDayMs(at('2025-10-02')), true);
+  // Holidays only, weekends off
+  G.configureRestDays({ enabled: true, strength: 'pause', dates: [], auto: true, weekends: false });
+  assert.equal(G.isRestDayMs(at('2025-10-02')), true);   // National Day
+  assert.equal(G.isRestDayMs(at('2025-10-04')), false);  // Saturday
+  // Manual only
+  G.configureRestDays({ enabled: true, strength: 'pause', dates: ['2025-10-09'], auto: false, weekends: false });
+  assert.equal(G.isRestDayMs(at('2025-10-02')), false);
+  assert.equal(G.isRestDayMs(at('2025-10-09')), true);
+});
+
+test('upcoming rest days feed the advance reminder', () => {
+  const at = iso => new Date(iso + 'T12:00:00').getTime();
+  G.configureRestDays({ enabled: true, strength: 'slow', dates: [], weekends: false, auto: true });
+  const list = G.upcomingRestDays(at('2025-09-29'), 7);
+  assert.ok(list.some(u => u.iso === '2025-10-01' && u.reason === '国庆节'));
+  assert.ok(list.some(u => u.iso === '2025-10-06' && u.reason === '中秋'));
+  assert.ok(!list.some(u => u.offset > 7));
+  // Remind settings normalise invalid values
+  G.configureRestDays({ enabled: true, strength: 'slow', dates: [], remind: { enabled: true, days: 42 } });
+  G.configureRestDays({ enabled: true, strength: 'slow', dates: [] });
+});
